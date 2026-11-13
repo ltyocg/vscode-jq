@@ -154,6 +154,19 @@ test('comments', () => {
   );
 });
 
+test('group opened on a pipe-continuation line indents from that line', () => {
+  // A group whose opener sits on the '| ...' continuation line (indent 1)
+  // bases its contents one level deeper than that line, closers back on it.
+  assert.equal(
+    fmt('.a\n| map({\n  b: 1\n})'),
+    '.a\n  | map(\n    {\n      b: 1\n    }\n  )\n',
+  );
+  assert.equal(
+    fmt('.a\n| {\n  b: 1\n}'),
+    '.a\n  | {\n    b: 1\n  }\n',
+  );
+});
+
 test('idempotency', () => {
   const samples = [
     'def f(a;b):.a|f;\n.x as $v|$v|f(1;2)',

@@ -124,8 +124,15 @@ function gapBetween(prev: Token, next: Token, enclosing: string): 'none' | 'spac
 interface GroupCtx {
   kind: '(' | '[' | '{';
   expanded: boolean;
-  /** indent level before entering the group */
+  /** ctxIndent to restore when the group closes */
   savedIndent: number;
+  /**
+   * Indent level of the line the opener was emitted on. An expanded
+   * group puts its closer on this line's level — after a pipe break
+   * that line is one deeper than ctxIndent, and contents/closer must
+   * follow it, not the pre-pipe context.
+   */
+  closeIndent: number;
 }
 
 interface ClauseCtx {
@@ -329,7 +336,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
           breakLevels = ctxIndent + 1;
         }
       } else if (CLOSERS.has(t.text)) {
-        if (innerGroup && innerGroup.expanded) breakLevels = innerGroup.savedIndent;
+        if (innerGroup && innerGroup.expanded) breakLevels = innerGroup.closeIndent;
       }
     } else if (t.type === 'keyword') {
       if (CLAUSE_KEYWORDS.has(t.text)) {
@@ -396,9 +403,10 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
           kind: t.text as '(' | '[' | '{',
           expanded,
           savedIndent: ctxIndent,
+          closeIndent: curLineIndent,
         });
         if (expanded) {
-          ctxIndent++;
+          ctxIndent = curLineIndent + 1;
           pendingForcedBreak = true;
         }
       } else if (CLOSERS.has(t.text)) {

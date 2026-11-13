@@ -1,9 +1,14 @@
 import * as vscode from 'vscode';
 import { formatJq, FormatError, FormatOptions } from './formatter';
+import { startJqLsp } from './lsp';
+import type { LanguageClient } from 'vscode-languageclient/node';
 
 const LOG = vscode.window.createOutputChannel('jq', { log: true });
 
+let lspClient: LanguageClient | undefined;
+
 export function activate(context: vscode.ExtensionContext): void {
+  // -- formatter (built-in, independent of the language server) -------------
   const formatOptions = (): FormatOptions => {
     const cfg = vscode.workspace.getConfiguration('jq.format');
     return {
@@ -36,10 +41,24 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   };
 
+  // -- language server (diagnostics, completion, hover, definitions) --------
+  const lsp = startJqLsp(LOG);
+  lspClient = lsp.client;
+  if (lsp.client) {
+    context.subscriptions.push({
+      dispose: () => void lspClient?.stop(),
+    });
+  } else if (lsp.reason && !lsp.reason.startsWith('disabled')) {
+    // Server binary missing: tell the user how to get it (once per window).
+    void vscode.window.showInformationMessage(lsp.reason);
+  }
+
   context.subscriptions.push(
     LOG,
     vscode.languages.registerDocumentFormattingEditProvider('jq', provider),
   );
 }
 
-export function deactivate(): void {}
+export function deactivate(): Thenable<void> | undefined {
+  return lspClient?.stop();
+}

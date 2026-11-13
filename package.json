@@ -1,8 +1,8 @@
 {
   "name": "vscode-jq",
   "displayName": "jq Language Support",
-  "description": "Syntax highlighting and formatting for the jq language (jqlang)",
-  "version": "0.1.0",
+  "description": "Syntax highlighting, formatting and language-server features for the jq language (jqlang)",
+  "version": "0.2.0",
   "publisher": "gigaplant",
   "license": "MIT",
   "repository": {
@@ -10,22 +10,26 @@
     "url": "https://github.com/gigaplant/vscode-jq"
   },
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.146.0"
   },
+  "packageManager": "pnpm@12.11.2",
   "categories": [
     "Programming Languages",
-    "Formatters"
+    "Formatters",
+    "Linters"
   ],
   "keywords": [
     "jq",
     "jqlang",
     "highlighting",
-    "formatter"
+    "formatter",
+    "lsp",
+    "language server"
   ],
   "activationEvents": [
     "onLanguage:jq"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
@@ -62,19 +66,34 @@
           "minimum": 1,
           "maximum": 8,
           "description": "Number of spaces per indentation level."
+        },
+        "jq.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the jq-lsp language server for diagnostics, completion, hover and go-to-definition. Formatting is unaffected by this setting."
+        },
+        "jq.lsp.path": {
+          "type": "string",
+          "default": "jq-lsp",
+          "description": "Command or absolute path of the jq-lsp binary (github.com/wader/jq-lsp)."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./ && node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p ./ --noEmit",
     "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\""
   },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
   "devDependencies": {
-    "@types/node": "^18.19.0",
-    "@types/vscode": "^1.80.0",
-    "typescript": "^5.4.0"
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.146.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }
