@@ -1,0 +1,80 @@
+{
+  "name": "vscode-jq",
+  "displayName": "jq Language Support",
+  "description": "Syntax highlighting and formatting for the jq language (jqlang)",
+  "version": "0.1.0",
+  "publisher": "gigaplant",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gigaplant/vscode-jq"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "keywords": [
+    "jq",
+    "jqlang",
+    "highlighting",
+    "formatter"
+  ],
+  "activationEvents": [
+    "onLanguage:jq"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "jq",
+        "aliases": [
+          "jq",
+          "jqlang"
+        ],
+        "extensions": [
+          ".jq"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jq",
+        "scopeName": "source.jq",
+        "path": "./syntaxes/jq.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "jq",
+      "properties": {
+        "jq.format.printWidth": {
+          "type": "integer",
+          "default": 80,
+          "minimum": 20,
+          "description": "Maximum line width before the formatter breaks pipelines and lists."
+        },
+        "jq.format.indentSize": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Number of spaces per indentation level."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.4.0"
+  }
+}

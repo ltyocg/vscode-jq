@@ -1,0 +1,165 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "jq",
+  "scopeName": "source.jq",
+  "patterns": [{ "include": "#main" }],
+  "repository": {
+    "main": {
+      "patterns": [
+        { "include": "#comment" },
+        { "include": "#string" },
+        { "include": "#func-def" },
+        { "include": "#keywords" },
+        { "include": "#constants" },
+        { "include": "#variable" },
+        { "include": "#format" },
+        { "include": "#number" },
+        { "include": "#operators" },
+        { "include": "#parens" },
+        { "include": "#array" },
+        { "include": "#object" },
+        { "include": "#builtin-function" },
+        { "include": "#identifier" }
+      ]
+    },
+
+    "comment": {
+      "name": "comment.line.number-sign.jq",
+      "begin": "#",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.jq" } },
+      "end": "$"
+    },
+
+    "string": {
+      "name": "string.quoted.double.jq",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.jq" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.jq" } },
+      "patterns": [
+        { "include": "#string-escape" },
+        { "include": "#interpolation" }
+      ]
+    },
+
+    "string-escape": {
+      "name": "constant.character.escape.jq",
+      "match": "\\\\(?:[\\\\\"/bfnrt]|u[0-9a-fA-F]{4})"
+    },
+
+    "interpolation": {
+      "name": "meta.embedded.jq",
+      "begin": "\\\\\\(",
+      "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.jq" } },
+      "end": "\\)",
+      "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.jq" } },
+      "patterns": [{ "include": "#main" }]
+    },
+
+    "func-def": {
+      "begin": "(?:^|(?<=[\\s;{(]))(def)\\s+([a-zA-Z_][a-zA-Z_0-9]*)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.def.jq" },
+        "2": { "name": "entity.name.function.jq" }
+      },
+      "end": "(?=;)",
+      "patterns": [{ "include": "#main" }]
+    },
+
+    "keywords": {
+      "name": "keyword.control.jq",
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(module|import|include|def|if|then|elif|else|end|as|reduce|foreach|try|catch|label|break)(?=$|[^a-zA-Z_0-9])"
+    },
+
+    "constants": {
+      "name": "constant.language.jq",
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(true|false|null)(?=$|[^a-zA-Z_0-9])"
+    },
+
+    "variable": {
+      "patterns": [
+        {
+          "name": "variable.language.loc.jq",
+          "match": "\\$__loc__"
+        },
+        {
+          "name": "variable.other.jq",
+          "match": "\\$[a-zA-Z_][a-zA-Z_0-9]*"
+        }
+      ]
+    },
+
+    "format": {
+      "name": "support.function.format.jq",
+      "match": "@[a-zA-Z_0-9]+"
+    },
+
+    "number": {
+      "name": "constant.numeric.jq",
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?(?=$|[^a-zA-Z_0-9])"
+    },
+
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.jq",
+          "match": "\\|=|//=|\\+=|-=|\\*=|/=|%=|(?<![<>=!])=(?!=)"
+        },
+        {
+          "name": "keyword.operator.jq",
+          "match": "\\?//|//|==|!=|<=|>=|\\.\\.|\\?|\\||\\+|-|\\*|/|%|<|>|\\$"
+        },
+        {
+          "name": "keyword.operator.logical.jq",
+          "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(and|or)(?=$|[^a-zA-Z_0-9])"
+        },
+        {
+          "name": "punctuation.separator.jq",
+          "match": ",|;"
+        },
+        {
+          "name": "punctuation.separator.colon.jq",
+          "match": ":"
+        },
+        {
+          "name": "keyword.operator.accessor.jq",
+          "match": "\\."
+        }
+      ]
+    },
+
+    "parens": {
+      "begin": "\\(",
+      "beginCaptures": { "0": { "name": "punctuation.section.parens.begin.jq" } },
+      "end": "\\)",
+      "endCaptures": { "0": { "name": "punctuation.section.parens.end.jq" } },
+      "patterns": [{ "include": "#main" }]
+    },
+
+    "array": {
+      "begin": "\\[",
+      "beginCaptures": { "0": { "name": "punctuation.section.brackets.begin.jq" } },
+      "end": "\\]",
+      "endCaptures": { "0": { "name": "punctuation.section.brackets.end.jq" } },
+      "patterns": [{ "include": "#main" }]
+    },
+
+    "object": {
+      "begin": "\\{",
+      "beginCaptures": { "0": { "name": "punctuation.section.braces.begin.jq" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.braces.end.jq" } },
+      "patterns": [{ "include": "#main" }]
+    },
+
+    "builtin-function": {
+      "name": "support.function.builtin.jq",
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(not|empty|error|map|map_values|select|recurse|env|input|inputs|debug|stderr|paths|leaf_paths|length|utf8bytelength|keys|keys_unsorted|values|has|in|contains|inside|path|getpath|setpath|delpaths|del|to_entries|from_entries|with_entries|add|any|all|flatten|range|floor|sqrt|pow|log|exp|log10|log2|exp10|exp2|fabs|round|ceil|rint|significand|logb|scalb|nearbyint|trunc|isnan|isinfinite|isnormal|infinite|nan|type|tostring|tonumber|tojson|fromjson|ascii_downcase|ascii_upcase|explode|implode|split|join|ltrimstr|rtrimstr|startswith|endswith|test|match|capture|scan|splits|sub|gsub|tostream|fromstream|truncate_stream|group_by|unique|unique_by|min|max|min_by|max_by|sort|sort_by|reverse|indices|index|rindex|limit|first|last|nth|until|while|repeat|halt|halt_error|todate|fromdate|now|strptime|strftime|mktime|gmtime|localtime|dateadd|datesub|date|abs|toarray|arrays|objects|booleans|numbers|strings|nulls|iterables|scalars|input_line_number|input_filename|builtins)(?=$|[^a-zA-Z_0-9])"
+    },
+
+    "identifier": {
+      "name": "meta.identifier.jq",
+      "match": "[a-zA-Z_][a-zA-Z_0-9]*"
+    }
+  }
+}
