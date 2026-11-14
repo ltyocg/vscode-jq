@@ -2,7 +2,7 @@
   "name": "vscode-jq",
   "displayName": "jq Language Support",
   "description": "Syntax highlighting, formatting and language-server features for the jq language (jqlang)",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "publisher": "gigaplant",
   "license": "MIT",
   "repository": {
@@ -85,7 +85,8 @@
     "compile": "tsc -p ./ && node esbuild.mjs --production",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p ./ --noEmit",
-    "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\""
+    "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package --no-dependencies --out build/"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
@@ -93,6 +94,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/vscode": "^1.146.0",
+    "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vscode-oniguruma": "^2.0.1",
