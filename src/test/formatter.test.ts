@@ -154,6 +154,40 @@ test('comments', () => {
   );
 });
 
+test('comment backslash continuation (jq 1.8 spec)', () => {
+  // odd run of trailing backslashes: the next line is part of the comment
+  // and is kept verbatim, never re-indented
+  assert.equal(
+    fmt('[.[]] # c \\\n, 99 is comment'),
+    '[.[]]  # c \\\n, 99 is comment\n',
+  );
+  // even run: the next line is code and is formatted normally
+  assert.equal(
+    fmt('1, # even \\\\\n2'),
+    '1,  # even \\\\\n2\n',
+  );
+  // standalone continued comment
+  assert.equal(
+    fmt('# a \\\ncont line\n. as $x | $x'),
+    '# a \\\ncont line\n. as $x | $x\n',
+  );
+  // a backslash followed by a space is NOT a continuation in jq; the
+  // space must survive formatting so the next line stays code
+  assert.equal(
+    fmt('2 # c \\ \n+ 3'),
+    '2  # c \\ \n+ 3\n',
+  );
+});
+
+test('leading-dot number literals', () => {
+  assert.equal(fmt('.5+.5e2'), '.5 + .5e2\n');
+  assert.equal(fmt('[.5, .25]'), '[.5, .25]\n');
+  assert.equal(fmt('{a: .5}'), '{a: .5}\n');
+  assert.equal(fmt('-.5'), '-.5\n');
+  // dot access stays dot access
+  assert.equal(fmt('.a[0] | .[]'), '.a[0] | .[]\n');
+});
+
 test('group opened on a pipe-continuation line indents from that line', () => {
   // A group whose opener sits on the '| ...' continuation line (indent 1)
   // bases its contents one level deeper than that line, closers back on it.
@@ -176,6 +210,9 @@ test('idempotency', () => {
     '# c\n.foo | .bar # d\n| .baz',
     'try (.a | .b) catch ("err: \\(.)")',
     'label $out | foreach .[] as $x (0; .+1; if . > 3 then break $out else . end)',
+    '# a \\\ncont\n. as $x | $x',
+    '[.[]] # c \\\n, 99 is comment',
+    '.5 + .5e2 + 1.5',
   ];
   for (const s of samples) {
     const once = fmt(s);

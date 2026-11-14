@@ -27,7 +27,7 @@
       "name": "comment.line.number-sign.jq",
       "begin": "#",
       "beginCaptures": { "0": { "name": "punctuation.definition.comment.jq" } },
-      "end": "$"
+      "end": "(?<=(?:^|[^\\\\\\n\\r])(?:\\\\\\\\)*)$"
     },
 
     "string": {
@@ -38,13 +38,19 @@
       "endCaptures": { "0": { "name": "punctuation.definition.string.end.jq" } },
       "patterns": [
         { "include": "#string-escape" },
-        { "include": "#interpolation" }
+        { "include": "#interpolation" },
+        { "include": "#invalid-escape" }
       ]
     },
 
     "string-escape": {
       "name": "constant.character.escape.jq",
       "match": "\\\\(?:[\\\\\"/bfnrt]|u[0-9a-fA-F]{4})"
+    },
+
+    "invalid-escape": {
+      "name": "invalid.illegal.escape.jq",
+      "match": "\\\\."
     },
 
     "interpolation": {
@@ -57,7 +63,7 @@
     },
 
     "func-def": {
-      "begin": "(?:^|(?<=[\\s;{(]))(def)\\s+([a-zA-Z_][a-zA-Z_0-9]*)",
+      "begin": "(?:^|(?<=[\\s;{(|)]))(def)\\s+([a-zA-Z_][a-zA-Z_0-9]*)",
       "beginCaptures": {
         "1": { "name": "keyword.control.def.jq" },
         "2": { "name": "entity.name.function.jq" }
@@ -96,7 +102,7 @@
 
     "number": {
       "name": "constant.numeric.jq",
-      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?(?=$|[^a-zA-Z_0-9])"
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?=$|[^a-zA-Z_0-9])"
     },
 
     "operators": {
@@ -154,7 +160,7 @@
 
     "builtin-function": {
       "name": "support.function.builtin.jq",
-      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(not|empty|error|map|map_values|select|recurse|env|input|inputs|debug|stderr|paths|leaf_paths|length|utf8bytelength|keys|keys_unsorted|values|has|in|contains|inside|path|getpath|setpath|delpaths|del|to_entries|from_entries|with_entries|add|any|all|flatten|range|floor|sqrt|pow|log|exp|log10|log2|exp10|exp2|fabs|round|ceil|rint|significand|logb|scalb|nearbyint|trunc|isnan|isinfinite|isnormal|infinite|nan|type|tostring|tonumber|tojson|fromjson|ascii_downcase|ascii_upcase|explode|implode|split|join|ltrimstr|rtrimstr|startswith|endswith|test|match|capture|scan|splits|sub|gsub|tostream|fromstream|truncate_stream|group_by|unique|unique_by|min|max|min_by|max_by|sort|sort_by|reverse|indices|index|rindex|limit|first|last|nth|until|while|repeat|halt|halt_error|todate|fromdate|now|strptime|strftime|mktime|gmtime|localtime|dateadd|datesub|date|abs|toarray|arrays|objects|booleans|numbers|strings|nulls|iterables|scalars|input_line_number|input_filename|builtins)(?=$|[^a-zA-Z_0-9])"
+      "match": "(?:^|(?<=[^a-zA-Z_0-9$@.]))(not|empty|error|map|map_values|select|recurse|env|input|inputs|debug|stderr|paths|length|utf8bytelength|keys|keys_unsorted|values|has|in|contains|inside|path|getpath|setpath|delpaths|del|to_entries|from_entries|with_entries|add|any|all|flatten|range|floor|sqrt|pow|log|exp|log10|log2|exp10|exp2|expm1|fabs|round|ceil|rint|significand|logb|scalb|scalbln|nearbyint|trunc|isnan|isinfinite|isnormal|isfinite|infinite|nan|abs|toarray|toboolean|type|tostring|tonumber|tojson|fromjson|ascii_downcase|ascii_upcase|explode|implode|split|join|ltrimstr|rtrimstr|trimstr|ltrim|rtrim|trim|startswith|endswith|test|match|capture|scan|splits|sub|gsub|tostream|fromstream|truncate_stream|group_by|unique|unique_by|min|max|min_by|max_by|sort|sort_by|reverse|indices|index|rindex|bsearch|limit|first|last|nth|until|while|repeat|halt|halt_error|todate|todateiso8601|fromdate|fromdateiso8601|now|strptime|strftime|strflocaltime|mktime|gmtime|localtime|dateadd|datesub|date|arrays|objects|booleans|numbers|strings|nulls|iterables|scalars|finites|normals|isempty|input_line_number|input_filename|builtins|combinations|transpose|walk|pick|skip|format|IN|INDEX|JOIN|acos|acosh|asin|asinh|atan|atan2|atanh|cbrt|copysign|cos|cosh|drem|erf|erfc|fdim|fma|fmax|fmin|fmod|frexp|gamma|hypot|j0|j1|jn|ldexp|lgamma|lgamma_r|modf|nextafter|nexttoward|remainder|sin|sinh|tan|tanh|tgamma|y0|y1|yn|modulemeta|get_jq_origin|get_prog_origin|get_search_list|have_decnum|have_literal_numbers)(?=$|[^a-zA-Z_0-9])"
     },
 
     "identifier": {

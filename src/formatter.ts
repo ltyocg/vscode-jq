@@ -46,6 +46,18 @@ function countNewlines(s: string): number {
   return n;
 }
 
+/**
+ * Trim trailing whitespace from a rendered line — except that one space is
+ * kept when what remains ends with an odd run of backslashes. Dropping it
+ * would turn the following output line into a jq comment continuation
+ * and silently comment out code.
+ */
+function trimLineEnd(s: string): string {
+  const t = s.replace(/\s+$/, '');
+  if (t !== s && /(?:^|[^\\])(?:\\{2})*\\$/.test(t)) return t + ' ';
+  return t;
+}
+
 /** Tokens that can end an operand, so a following '.' or '[' binds tightly. */
 function isOperandEnd(t: Token | undefined): boolean {
   if (!t) return false;
@@ -183,7 +195,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
     curLineIndent = levels;
   };
   const finishLine = () => {
-    lines.push(indentStr(curLineIndent) + cur.replace(/\s+$/, ''));
+    lines.push(indentStr(curLineIndent) + trimLineEnd(cur));
     cur = '';
   };
 
@@ -304,7 +316,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
     const t = tokens[i];
 
     if (t.type === 'comment') {
-      const text = t.text.replace(/\s+$/, '');
+      const text = trimLineEnd(t.text);
       if (t.line === lastAnyEndLine && lastAnyEndLine >= 0) {
         // trailing comment: stays on the current line
         cur += (cur === '' ? '' : '  ') + text;
@@ -315,7 +327,8 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
         lines.push(indentStr(ctxIndent) + text);
         startLine(ctxIndent);
       }
-      lastAnyEndLine = t.line;
+      // A continued comment (odd trailing backslashes) spans several lines.
+      lastAnyEndLine = t.line + countNewlines(t.text);
       continue;
     }
 

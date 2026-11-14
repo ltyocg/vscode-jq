@@ -94,6 +94,8 @@
     "@types/node": "^26.6.6",
     "@types/vscode": "^1.146.0",
     "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   }
 }

@@ -54,6 +54,34 @@ const isIdentChar = (c: string) => /[a-zA-Z_0-9]/.test(c);
 const isDigit = (c: string) => c >= '0' && c <= '9';
 
 /**
+ * Scan a `#` comment starting at s[start] === '#'.
+ *
+ * Per the jq manual: a `#` starts a comment that runs to the end of the
+ * line, but when the end of the line is preceded by an odd number of
+ * backslash characters, the following line is part of the comment as
+ * well (this is what makes the `# \` shebang trick work). Returns the
+ * index of the terminating newline, or s.length at end of input.
+ */
+function scanComment(s: string, start: number): number {
+  let i = start;
+  for (;;) {
+    let eol = i;
+    while (eol < s.length && s[eol] !== '\n') eol++;
+    if (eol >= s.length) return eol;
+    // Count the run of backslashes ending this line (before an optional \r).
+    let k = eol;
+    if (k > i && s[k - 1] === '\r') k--;
+    let backslashes = 0;
+    while (k > i && s[k - 1] === '\\') {
+      backslashes++;
+      k--;
+    }
+    if (backslashes % 2 === 0) return eol;
+    i = eol + 1; // odd run: the next line is comment too
+  }
+}
+
+/**
  * Scan a double-quoted jq string starting at s[start] === '"'.
  * Handles escapes and \(...) interpolation with full nesting
  * (strings inside interpolations, interpolations inside those strings, ...).
@@ -91,7 +119,7 @@ function scanInterpolation(s: string, i: number): number {
     if (c === '"') {
       i = scanString(s, i) + 1;
     } else if (c === '#') {
-      while (i < s.length && s[i] !== '\n') i++;
+      i = scanComment(s, i);
     } else if (c === '(') {
       depth++;
       i++;
@@ -104,6 +132,33 @@ function scanInterpolation(s: string, i: number): number {
     }
   }
   throw new LexError('unterminated string interpolation');
+}
+
+/**
+ * Scan a number literal starting at s[i] (a digit, or '.' followed by a
+ * digit — jq accepts leading-dot floats like `.5`). Returns the index
+ * just past the literal.
+ */
+function scanNumber(s: string, i: number): number {
+  if (s[i] === '.') {
+    i++;
+    while (i < s.length && isDigit(s[i])) i++;
+  } else {
+    while (i < s.length && isDigit(s[i])) i++;
+    if (s[i] === '.') {
+      i++;
+      while (i < s.length && isDigit(s[i])) i++;
+    }
+  }
+  if (s[i] === 'e' || s[i] === 'E') {
+    let j = i + 1;
+    if (s[j] === '+' || s[j] === '-') j++;
+    if (isDigit(s[j])) {
+      i = j;
+      while (i < s.length && isDigit(s[i])) i++;
+    }
+  }
+  return i;
 }
 
 export function tokenize(src: string): Token[] {
@@ -130,8 +185,16 @@ export function tokenize(src: string): Token[] {
     }
     if (c === '#') {
       const begin = i;
-      while (i < src.length && src[i] !== '\n') i++;
+      i = scanComment(src, i);
       push('comment', src.slice(begin, i));
+      // The token may span lines (backslash continuation); catch up the
+      // line counter so later tokens report correct positions.
+      const text = src.slice(begin, i);
+      const lastNl = text.lastIndexOf('\n');
+      if (lastNl >= 0) {
+        for (const ch of text) if (ch === '\n') line++;
+        lineStart = begin + lastNl + 1;
+      }
       continue;
     }
     if (c === '"') {
@@ -159,21 +222,9 @@ export function tokenize(src: string): Token[] {
       }
       continue;
     }
-    if (isDigit(c)) {
+    if (isDigit(c) || (c === '.' && isDigit(src[i + 1]))) {
       const begin = i;
-      while (i < src.length && isDigit(src[i])) i++;
-      if (src[i] === '.') {
-        i++;
-        while (i < src.length && isDigit(src[i])) i++;
-      }
-      if (src[i] === 'e' || src[i] === 'E') {
-        let j = i + 1;
-        if (src[j] === '+' || src[j] === '-') j++;
-        if (j < src.length && isDigit(src[j])) {
-          i = j;
-          while (i < src.length && isDigit(src[i])) i++;
-        }
-      }
+      i = scanNumber(src, i);
       push('number', src.slice(begin, i));
       continue;
     }
