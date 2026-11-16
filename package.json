@@ -12,7 +12,6 @@
   "engines": {
     "vscode": "^1.146.0"
   },
-  "packageManager": "pnpm@12.11.2",
   "categories": [
     "Programming Languages",
     "Formatters",
@@ -86,7 +85,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p ./ --noEmit",
     "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\"",
-    "package": "vsce package --no-dependencies --out build/"
+    "package": "node -e \"fs.mkdirSync('build', {recursive: true})\" && vsce package --no-dependencies --out build/"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
