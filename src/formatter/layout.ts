@@ -10,14 +10,8 @@
 import type { FormatOptions } from './api'
 import { breakAfter, breakBefore } from './breakkind'
 import { LineBuilder, trimLineEnd } from './emit'
-import {
-  CLOSERS,
-  OPENERS,
-  gapBetween,
-  padsInsideBracket,
-  type BracketStyle,
-  type FmtToken
-} from './spacing'
+import { Measure } from './measure'
+import { CLOSERS, OPENERS, gapBetween, padsInsideBracket, type FmtToken } from './spacing'
 import {
   MAX_SEGMENT_LOOKAHEAD,
   TokenStream,
@@ -93,17 +87,6 @@ interface BreakDecision {
   indent: number | null
 }
 
-/**
- * flatSpan 的补位风格：跨距内的组一律按单行模拟（见 spacing.ts 的
- * padsInsideBracket）。stack 是跨距内已开未闭的括号种类栈，
- * 空栈表示当前不在任何组内。
- */
-function flatStyle(stack: string[]): BracketStyle | null {
-  return stack.length
-    ? { kind: stack[stack.length - 1] as BracketStyle['kind'], expanded: false, hanging: false }
-    : null
-}
-
 export class Layout {
   // -- 语法上下文 --
   private readonly groups: GroupCtx[] = []
@@ -135,7 +118,12 @@ export class Layout {
     // 便捷别名：token 与括号配对是最高频的访问
     this.tokens = st.tokens
     this.match = st.match
+    // 行宽测量：col 回调让测量读到活的发射进度，又不触碰发射状态
+    this.m = new Measure(st, opts, () => out.col())
   }
+
+  /** 行宽测量（见 measure.ts） */
+  private readonly m: Measure
 
   private readonly tokens: readonly FmtToken[]
   private readonly match: ReadonlyMap<number, number>
@@ -247,7 +235,7 @@ export class Layout {
       case 'pipe':
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
         // 断行（比上下文深一层）
-        if (!inlineInnermost && (nl > 0 || this.pipeOverflow(i))) {
+        if (!inlineInnermost && (nl > 0 || this.m.pipeOverflow(i))) {
           indent = this.ctxIndent + this.opts.indentSize
         }
         break
@@ -263,7 +251,7 @@ export class Layout {
       case 'binop':
         // 双目运算符：源码此处有换行，或其后的片段放不进本行，则以
         // 行首运算符断行，与本行（表达式起始行）同层
-        if (!inlineInnermost && (nl > 0 || this.operatorOverflow(i))) {
+        if (!inlineInnermost && (nl > 0 || this.m.operatorOverflow(i))) {
           indent = this.out.indentCols
         }
         break
@@ -282,7 +270,7 @@ export class Layout {
         break
       case 'clause':
         // 子句关键字：源码有换行或行宽不够时，回到 if/try 所在行的行首
-        if (!inlineInnermost && (nl > 0 || this.clauseOverflow(i))) {
+        if (!inlineInnermost && (nl > 0 || this.m.clauseOverflow(i))) {
           indent = this.findClauseIndent(t.text === 'catch' ? 'try' : 'if') ?? this.ctxIndent
         }
         break
@@ -443,97 +431,7 @@ export class Layout {
     }
   }
 
-  // -- 行宽测量 -----------------------------------------------------------
-  //
-  // flatSpan / segmentWidth 在每次断行决策时各被调用常数次，每次为
-  // 片段长度的线性开销；findSegmentEnd 以 MAX_SEGMENT_LOOKAHEAD 封顶，
-  // 整体不会超出单遍扫描的常数倍。
-
-  /**
-   * 把 tokens[start, end) 试排成一行；片段含注释时返回 null。
-   * ignoreComments 为真时跳过注释而不是放弃测量 —— 用于悬挂式判定：
-   * 开括号行上的行尾注释不参与代码宽度（注释本身不受行宽约束），
-   * 不应把组挤成分隔式。
-   */
-  private flatSpan(start: number, end: number, hint: string, ignoreComments = false): string | null {
-    let out = ''
-    // 跨距内已开未闭的组的括号种类
-    const stack: string[] = []
-    let prev: FmtToken | undefined
-    for (let k = start; k < end; k++) {
-      const tk = this.tokens[k]
-      if (tk.type === 'comment') {
-        if (!ignoreComments) return null
-        continue
-      }
-      const enclosing = stack.length ? stack[stack.length - 1] : hint
-      if (prev) {
-        if (gapBetween(prev, tk, enclosing) === 'space') out += ' '
-        else if (padsInsideBracket(prev, tk, flatStyle(stack))) out += ' '
-      }
-      out += tk.text
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) stack.push(tk.text)
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) stack.pop()
-      prev = tk
-    }
-    return out
-  }
-
-  /** 从 j 起第一个合法断点（不含 j 自身）的下标。 */
-  private findSegmentEnd(j: number): number {
-    let depth = 0
-    const cap = Math.min(this.tokens.length, j + MAX_SEGMENT_LOOKAHEAD)
-    for (let k = j; k < cap; k++) {
-      const tk = this.tokens[k]
-      if (k > j) {
-        if (tk.type === 'comment') return k // 注释永远终结它所在的一行
-        // 深度 0 的任意断点种类都终结片段（词汇表的全集）
-        if (depth === 0 && breakBefore(this.st, k) !== null) return k
-      }
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-    }
-    return this.tokens.length
-  }
-
-  /** 从 j 起下一个片段的单行宽度；含注释（不可平铺）时为无穷。 */
-  private segmentWidth(j: number): number {
-    // 前置的行尾注释贴在当前行上，不计入其后片段的宽度
-    let start = j
-    while (start < this.tokens.length && this.tokens[start].type === 'comment') start++
-    const flat = this.flatSpan(start, this.findSegmentEnd(start), '')
-    return flat === null ? Infinity : flat.length
-  }
-
-  /** '|' 之后的片段是否会超出行宽（3 是 ' | ' 的宽度）。 */
-  private pipeOverflow(i: number): boolean {
-    const seg = this.segmentWidth(i + 1)
-    return seg === Infinity || this.out.col() + 3 + seg > this.opts.printWidth
-  }
-
-  /** 双目运算符续在本行是否会超宽（运算符两侧各一个空格 + 其后片段）。 */
-  private operatorOverflow(i: number): boolean {
-    const seg = this.segmentWidth(i + 1)
-    return (
-      seg === Infinity ||
-      this.out.col() + this.tokens[i].text.length + 2 + seg > this.opts.printWidth
-    )
-  }
-
-  /**
-   * 子句关键字之后的片段是否会超出行宽。源码里关键字后（跳过注释）
-   * 就是换行的，关键字行到此为止，不可能超宽 —— 分支内容按源码留在
-   * 后续行，不把关键字挤到单独一行。
-   */
-  private clauseOverflow(i: number): boolean {
-    const t = this.tokens[i]
-    if (t.text !== 'then' && t.text !== 'elif' && t.text !== 'else') return false
-    const next = this.tokens[i + 1]
-    if (next === undefined || next.type === 'comment') return false
-    if (next.line > endLine(t)) return false
-    const seg = this.segmentWidth(i + 1)
-    return seg === Infinity || this.out.col() + t.text.length + 1 + seg > this.opts.printWidth
-  }
+  // -- 源码断行推断 --------------------------------------------------------
 
   /**
    * tokens[i] 的开括号组布局。是否展开与原先一致：源码组内有换行、
@@ -559,7 +457,7 @@ export class Layout {
     if (this.tokens[close].line > prevEnd) sourceBreak = true
     if (!sourceBreak && !hasComment) {
       // 源码单行：放得下就单行，放不下走分隔式
-      const flat = this.flatSpan(i + 1, close, this.tokens[i].text)
+      const flat = this.m.flatSpan(i + 1, close, this.tokens[i].text)
       if (flat === null) return { expanded: true, hanging: false, leadSep }
       // 内侧补位空格（只有大括号组补）+ 闭括号
       const extra = this.tokens[i].text === '{' ? 3 : 1
@@ -573,7 +471,7 @@ export class Layout {
     // 的位置（表达式中间、前导逗号之前……）。会断行的才展开。
     if (!this.groupBreaks(i, close)) {
       // 意图是单行：放得下就按单行处理（内侧补空格）
-      const flat = this.flatSpan(i + 1, close, this.tokens[i].text)
+      const flat = this.m.flatSpan(i + 1, close, this.tokens[i].text)
       // 此分支内不会有注释，flat 不会为 null
       const extra = this.tokens[i].text === '{' ? 3 : 1
       if (flat !== null && this.out.col() + flat.length + extra <= this.opts.printWidth) {
@@ -583,7 +481,7 @@ export class Layout {
     // 展开且会断行：首个内容在开括号行、且首个元素放得进该行，
     // 用悬挂式；否则分隔式。开括号行上的行尾注释不参与宽度测量
     if (!this.firstOnOpenerLine(i, close)) return { expanded: true, hanging: false, leadSep }
-    const flat = this.flatSpan(i + 1, this.firstSeparator(i, close), this.tokens[i].text, true)
+    const flat = this.m.flatSpan(i + 1, this.firstSeparator(i, close), this.tokens[i].text, true)
     if (flat === null) return { expanded: true, hanging: false, leadSep }
     // +2：开括号后的补位空格 + 其后的分隔符（或闭括号）
     if (this.out.col() + flat.length + 2 > this.opts.printWidth) {
@@ -687,7 +585,7 @@ export class Layout {
     if (!g?.expanded) return false
     if (!g.hanging) return true
     if (nl > 0) return true
-    return !this.elementBreaks(i) && this.elementOverflow(i)
+    return !this.elementBreaks(i) && this.m.elementOverflow(i)
   }
 
   /**
@@ -729,12 +627,6 @@ export class Layout {
       }
     }
     return false
-  }
-
-  /** 悬挂组内：当前元素续在本行是否会超宽（1 是元素前的一个空格） */
-  private elementOverflow(i: number): boolean {
-    const seg = this.segmentWidth(i)
-    return seg === Infinity || this.out.col() + 1 + seg > this.opts.printWidth
   }
 
   // -- 子句栈 --------------------------------------------------------------
