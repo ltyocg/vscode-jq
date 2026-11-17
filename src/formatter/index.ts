@@ -12,11 +12,15 @@
  *  - 对象/数组/括号组在源码有内部换行、包含注释或超出 printWidth
  *    时展开：开括号后接了内容为悬挂式（不强制断行，保留源码换行，
  *    超宽才补断），否则每元素一行
+ *  - 悬挂组的前导分隔符（源码在 ','/';' 之前换行）提到行首，与
+ *    开括号同列对齐；这种组的闭括号也回到开括号所在列，其余悬挂组
+ *    的闭括号回到开括号所在行的行首
  *  - 括号内侧空格：单行组只有对象大括号补一个；悬挂式展开组（开括号
  *    后接内容）各种括号都补，与内容同行的开/闭括号内侧各恰好一个；
  *    分隔式与空组不补
- *  - 用户的换行在合法断点处保留（';' 之后、def 前后、if/try 子句
- *    附近、'|' 与双目运算符之前），其余位置折叠
+ *  - 用户的换行在合法断点处保留（';' 之后、对象键冒号之后、def
+ *    前后、if/try 子句附近、'|'、双目运算符与分隔符之前），
+ *    其余位置折叠
  *  - 空行原样保留、绝不凭空增加；连续两个以上的空行压缩到两个
  *  - 注释保留：独立注释独占一行，行尾注释留在行尾
  *
@@ -55,7 +59,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
   const match = matchBrackets(tokens)
 
   const eol = src.includes('\r\n') ? '\r\n' : '\n'
-  const out = new LineBuilder(opts.indentSize)
+  const out = new LineBuilder()
   new Layout(tokens, match, opts, out).run()
   out.trimTrailingBlankLines()
   return out.join(eol) + eol

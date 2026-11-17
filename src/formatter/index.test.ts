@@ -281,6 +281,53 @@ test('group opened on a pipe-continuation line indents from that line', () => {
   assert.equal(fmt('.a\n| {\n  b: 1\n}'), '.a\n  | {\n    b: 1\n  }\n')
 })
 
+test('leading separators align with the opening bracket', () => {
+  // 悬挂组里源码在 ','/';' 之前换行：分隔符提到行首，与开括号同列
+  assert.equal(fmt('{ a: 1\n, b: 2\n}'), '{ a: 1\n, b: 2\n}\n')
+  assert.equal(fmt('[ 1\n, 2\n]'), '[ 1\n, 2\n]\n')
+  assert.equal(fmt('reduce .[] as $x ( 0\n; . + $x\n)'), 'reduce .[] as $x ( 0\n                 ; . + $x\n                 )\n')
+  // 开括号在行中间（前导运算符之后）：前导分隔符与闭括号对齐到开括号列
+  assert.equal(
+    fmt('p\n+ { "ENV": $env # comment\n  , "ARGS": $opts\n  }'),
+    'p\n+ { "ENV": $env # comment\n  , "ARGS": $opts\n  }\n'
+  )
+  // 开括号行上的行尾注释不参与宽度测量，不把组挤成分隔式
+  assert.equal(fmt('[ # note\n  1\n, 2\n]'), '[ # note\n  1\n, 2\n]\n')
+  // 无前导分隔符的悬挂组：闭括号仍回到开括号所在行的行首
+  assert.equal(fmt('x( "aaa"\n+ "bbb"\n)'), 'x( "aaa"\n+ "bbb"\n)\n')
+})
+
+test('object values break after the colon where the source does', () => {
+  // 对象键的冒号之后源码换行：值另起一行，比键所在行深一层
+  assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n  value\n}\n')
+  assert.equal(fmt('[ { a:\n    1\n}\n]'), '[ { a:\n  1\n}\n]\n')
+  // 冒号后源码未换行：值留在本行
+  assert.equal(fmt('{ a: 1,\n  b: 2\n}'), '{ a: 1,\n  b: 2\n}\n')
+  // 切片冒号不受影响
+  assert.equal(fmt('.[2:5]'), '.[2:5]\n')
+})
+
+test('elements that break internally stay on the separator line', () => {
+  // 前导分隔符后的元素内部会断行（键后换行、嵌套展开组）时，
+  // 不在分隔符后强行另起一行，避免分隔符孤零零留在行尾
+  assert.equal(
+    fmt('{ a: 1\n, key:\n    ( if x then y\n       else z\n       end\n     )\n}'),
+    '{ a: 1\n, key:\n  ( if x then y\n  else z\n  end\n  )\n}\n'
+  )
+})
+
+test('then stays on the elif line when the source breaks after it', () => {
+  // 子句关键字后（跳过注释）源码换行：then 留在本行，不因分支内容
+  // 平铺超宽而被挤到单独一行
+  const src = 'if .a then "aaa"\nelif .b then\n# note\n( "bbb"\n+ "ccc"\n)\nelse .\nend'
+  assert.equal(fmt(src), 'if .a then "aaa"\nelif .b then\n# note\n( "bbb"\n+ "ccc"\n)\nelse .\nend\n')
+  // 源码在 then 之后换行：分支内容另起一行，与子句关键字同层，
+  // 分支内的注释对齐到分支内容
+  assert.equal(fmt('if .a then\n  # note\n  .b\nelse\n  .c\nend'), 'if .a then\n# note\n.b\nelse\n.c\nend\n')
+  // then 之后源码未换行：内容留在本行
+  assert.equal(fmt('if .a then .b\nelse .c\nend'), 'if .a then .b\nelse .c\nend\n')
+})
+
 test('idempotency', () => {
   const samples = [
     'def f(a;b):.a|f;\n.x as $v|$v|f(1;2)',
