@@ -686,17 +686,20 @@ export class Layout {
         continue
       }
       const prev = this.tokens[k - 1]
+      // 展开组内的 def 总会断行；紧跟开括号且同行的除外（悬挂式例外）。
+      // 与源码换行无关：decideBreak 对展开组内的 def 总是断行，若只在
+      // 未换行的分支计入，源码恰好在 def 之前换行的组会被误判成单行，
+      // def 被折叠进行中。
+      if (
+        tk.type === 'keyword' &&
+        tk.text === 'def' &&
+        !isObjectKey(this.tokens, k) &&
+        k > i + 1
+      ) {
+        return true
+      }
       const nl = tk.line - (prev.line + countNewlines(prev.text))
       if (nl <= 0) {
-        // 展开组内的 def 总会断行；紧跟开括号且同行的除外（悬挂式例外）
-        if (
-          tk.type === 'keyword' &&
-          tk.text === 'def' &&
-          !isObjectKey(this.tokens, k) &&
-          k > i + 1
-        ) {
-          return true
-        }
         continue
       }
       // 源码此处有换行：只有落在合法断点处才会真的断行

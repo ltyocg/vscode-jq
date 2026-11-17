@@ -71,6 +71,15 @@ test('def formatting', () => {
   assert.equal(fmt('def f: .a;\n# c\ndef g: .b;'), 'def f: .a;\n# c\ndef g: .b;\n')
 })
 
+test('source break before def inside a group is not folded away', () => {
+  // 回归：groupBreaks 只在「未换行」分支计入「展开组内的 def 总会
+  // 断行」，源码恰好也在 def 之前换行时，组被误判成单行，def 被折叠
+  // 进行中。两种源码形态必须给出同一结果。
+  const out = '[ .x as $v |\n  def f: .a; f ]\n'
+  assert.equal(fmt('[.x as $v |\ndef f: .a; f]'), out)
+  assert.equal(fmt('[.x\nas $v | def f: .a; f]'), out)
+})
+
 test('blank lines: preserved verbatim, never added, capped at two', () => {
   // 管道之间
   assert.equal(fmt('.a\n\n| .b'), '.a\n\n  | .b\n')
@@ -346,7 +355,8 @@ test('idempotency', () => {
     '[\n  1,\n\n  2\n]',
     'reduce .[] as $x (0;\n  . + $x)',
     '[1, 2,\n  3]',
-    '[1,\n  2\n]'
+    '[1,\n  2\n]',
+    '[.x as $v |\ndef f: .a; f]'
   ]
   for (const s of samples) {
     const once = fmt(s)
