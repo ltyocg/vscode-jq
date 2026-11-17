@@ -25,8 +25,8 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "tsc -p ./ && node esbuild.mjs --production",
-    "watch": "node esbuild.mjs --watch",
+    "compile": "tsc -p ./ && node esbuild.mts --production",
+    "watch": "node esbuild.mts --watch",
     "typecheck": "tsc -p ./ --noEmit",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

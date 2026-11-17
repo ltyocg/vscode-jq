@@ -8,7 +8,7 @@ const ctx = await esbuild.context({
   bundle: true,
   format: 'cjs',
   platform: 'node',
-  target: 'node16',
+  target: 'node20',
   outfile: 'dist/extension.js',
   external: ['vscode'],
   minify: production,
