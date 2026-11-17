@@ -136,12 +136,15 @@ export class Predict {
       }
       // 源码此处有换行：只有落在合法断点处才会真的断行
       if (k === i + 1) return true // 开括号后首内容换行：展开必断
-      // 行首管道/双目运算符/前导分隔符/子句关键字（见 decideBreak）
+      // 行首管道/双目运算符/前导分隔符/子句关键字/reduce 分组开括号
+      //（见 decideBreak）
       const bk = breakBefore(this.#st, k)
-      if (bk === 'pipe' || bk === 'binop' || bk === 'leadSep' || bk === 'clause') return true
-      // 分隔符或子句关键字之后的换行：元素/分支另起一行（见 decideBreak）
+      if (bk === 'pipe' || bk === 'binop' || bk === 'leadSep' || bk === 'clause' || bk === 'reduce')
+        return true
+      // 分隔符、子句关键字或尾随双目运算符/管道之后的换行：元素/分支/
+      // 操作数另起一行（见 decideBreak）
       const ak = breakAfter(this.#st, k - 1)
-      if (ak === 'afterSep' || ak === 'afterClause') return true
+      if (ak === 'afterSep' || ak === 'afterClause' || ak === 'afterBinop') return true
     }
     const last = this.#st.tokens[close - 1]
     return this.#st.tokens[close].line > endLine(last)
@@ -168,9 +171,15 @@ export class Predict {
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
       else if (depth === 0) {
         // 悬挂式开括号行的首个宽度预算断点：前导分隔符、行首管道/
-        // 双目运算符或子句关键字（def 不在其列）
+        // 双目运算符或子句关键字（def 不在其列）。reduce 的 '(' 与
+        // 尾随双目运算符/管道只在源码确有换行处终结预算（无超宽补断）
         const bk = breakBefore(this.#st, k)
         if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
+        if (
+          (bk === 'reduce' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0) ||
+          (breakAfter(this.#st, k - 1) === 'afterBinop' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0)
+        )
+          return k
       }
     }
     return close
@@ -197,13 +206,15 @@ export class Predict {
         if (newlinesBetween(prev, tk) <= 0) continue
         // 源码此处有换行：落在合法断点上才会真的断行
         const bk = breakBefore(this.#st, k)
-        if (bk === 'pipe' || bk === 'binop' || bk === 'clause') return true
+        if (bk === 'pipe' || bk === 'binop' || bk === 'clause' || bk === 'reduce') return true
         const ak = breakAfter(this.#st, k - 1)
         // 冒号之后换行：值另起一行。predict 侧不区分冒号种类（对象键/
         // def 头/切片），一律算断 —— decide 侧的细分见 decideBreak
         if (ak === 'afterColon') return true
         // 子句关键字之后换行：分支内容另起一行（见 decideBreak）
         if (ak === 'afterClause') return true
+        // 尾随双目运算符/管道之后换行：操作数另起一行（见 decideBreak）
+        if (ak === 'afterBinop') return true
       } else if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) {
         return false // 空元素（j 本身就是分隔符）
       }

@@ -9,7 +9,7 @@
 import { breakBefore } from './breakkind'
 import type { FormatOptions } from './api'
 import { CLOSERS, OPENERS, gapBetween, padsInsideBracket, type BracketStyle, type FmtToken } from './spacing'
-import { MAX_SEGMENT_LOOKAHEAD, TokenStream, endLine } from './tokens'
+import { MAX_SEGMENT_LOOKAHEAD, TokenStream, endLine, newlinesBetween } from './tokens'
 
 /**
  * flatSpan 的补位风格：跨距内的组一律按单行模拟（见 spacing.ts 的
@@ -72,8 +72,14 @@ export class Measure {
       const tk = this.#st.tokens[k]
       if (k > j) {
         if (tk.type === 'comment') return k // 注释永远终结它所在的一行
-        // 深度 0 的任意断点种类都终结片段（词汇表的全集）
-        if (depth === 0 && breakBefore(this.#st, k) !== null) return k
+        // 深度 0 的任意断点种类都终结片段（词汇表的全集）。reduce 的
+        // '(' 除外：它无超宽补断，仅源码确有换行时才真的断行，未换行
+        // 时片段要跨过 reduce 分组继续量宽
+        if (depth === 0) {
+          const bk = breakBefore(this.#st, k)
+          if (bk !== null && (bk !== 'reduce' || newlinesBetween(this.#st.tokens[k - 1], tk) > 0))
+            return k
+        }
       }
       if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--

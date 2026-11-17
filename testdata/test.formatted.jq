@@ -38,7 +38,8 @@ def _delpaths($paths):
     elif has($p[0]) then .[$p[0]] |= _delpath($p[1:])
     else .
     end;
-  reduce ($paths | unique | reverse)[] as $p (.; _delpath($p));
+  reduce ($paths | unique | reverse)[] as $p
+    (.; _delpath($p));
 
 # TODO: keep track of position?
 # TODO: error on unbalanced string stack?
@@ -500,7 +501,8 @@ def parse:
               , { object: $key_patterns }
               ]
         )
-        // ( _consume(.lsquare) as [$rest, $_]
+        //
+        ( _consume(.lsquare) as [$rest, $_]
             | $rest
             | _repeat(
               ( _p("pattern") as [$rest, $pattern]
@@ -520,7 +522,8 @@ def parse:
               , { array: $pattern }
               ]
         )
-        // ( _consume(.binding) as [$rest, { $binding }]
+        //
+        ( _consume(.binding) as [$rest, { $binding }]
             | [ $rest
               , { name: $binding }
               ]
@@ -573,14 +576,15 @@ def parse:
                 }
                 ]
           )
-          // [ .
-             , { term:
-               { type: "TermTypeFunc"
-               , func:
-                 { name: $ident }
-               }
-             }
-             ]
+          //
+          [ .
+          , { term:
+            { type: "TermTypeFunc"
+            , func:
+              { name: $ident }
+            }
+          }
+          ]
       );
 
     # $name
@@ -751,7 +755,8 @@ def parse:
                       ( ( _consume(.ident) as [$rest, { $ident }]
                           | [$rest, $ident]
                       )
-                      // ( _consume(.binding) as [$rest, { $binding }]
+                      //
+                      ( _consume(.binding) as [$rest, { $binding }]
                           | [$rest, $binding]
                       )
                       ) as [$rest, $arg]
@@ -775,7 +780,8 @@ def parse:
                       }
                     ]
               )
-              // ( _consume(.colon)[0]
+              //
+              ( _consume(.colon)[0]
                   | _p("query") as [$rest, $body]
                   | $rest
                   | _consume(.semicolon) as [$rest, $_]
@@ -882,7 +888,8 @@ def parse:
               , { optional: true }
               ]
         )
-        // ( _keyword("as")
+        //
+        ( _keyword("as")
             | _p("pattern") as [$rest, $pattern]
             | $rest
             | _consume(.pipe)[0]
@@ -929,7 +936,8 @@ def parse:
               }
               ]
         )
-        // ( _consume(.dot)[0]
+        //
+        ( _consume(.dot)[0]
             | _consume(.lsquare)[0]
             | _optional(_p("query")) as [$rest, $start]
             | $rest
@@ -952,7 +960,8 @@ def parse:
               }
               ]
         )
-        // ( _consume(.index) as [$rest, { $index }]
+        //
+        ( _consume(.index) as [$rest, { $index }]
             | [ $rest
               , { term:
                 { type: "TermTypeIndex"
@@ -1345,7 +1354,8 @@ def eval_ast($query; $path; $env; undefined_func):
           else {}
           end
           end
-          | if (type == "object" and $t == "string") or (type == "array" and $t == "number") then
+          | if (type == "object" and $t == "string") or
+          (type == "array" and $t == "number") then
           .[$p0] |= _f($p[1:])
           else
           error("cannot index \(type) with \($t) \($p0)")
@@ -1760,7 +1770,8 @@ def eval_ast($query; $path; $env; undefined_func):
                       | _term_str
                   )
                   , ( $kv.val.queries[0]
-                  // ( $kv.key
+                  //
+                  ( $kv.key
                       | if startswith("$") then
                       { term:
                         { type: "TermTypeFunc"
@@ -1783,7 +1794,8 @@ def eval_ast($query; $path; $env; undefined_func):
                         | _term_str
                     )
                     , ( $kv.val.queries[0]
-                    // { term:
+                    //
+                    { term:
                       { type: "TermTypeIndex"
                       , index:
                         { name: $kv.key_string.str
@@ -1899,7 +1911,8 @@ def eval_ast($query; $path; $env; undefined_func):
                                   , extract: $extract
                                   }
             | ( $extract
-            // { term:
+            //
+            { term:
               { type: "TermTypeIdentity" }
             }
             ) as $extract
@@ -1920,7 +1933,8 @@ def eval_ast($query; $path; $env; undefined_func):
       def _try:
         ( $query.term. try as { $body, catch: $catch_ }
             | ( $catch_
-            // { term:
+            //
+            { term:
               { type: "TermTypeFunc"
               , func:
                 { name: "empty"
@@ -2094,8 +2108,15 @@ def eval_ast($query; $path; $env; undefined_func):
         elif $op == "*" then _l[1] * _r[1] | [[null], .]
         elif $op == "/" then _l[1] / _r[1] | [[null], .]
         elif $op == "%" then _l[1] % _r[1] | [[null], .]
-        elif $op | . == "=" or . == "|=" or . == "+=" or . == "-=" or . == "*=" or . == "/=" or .
-        == "%=" or . == "//" then
+        elif $op |
+          . == "=" or
+          . == "|=" or
+          . == "+=" or
+          . == "-=" or
+          . == "*=" or
+          . == "/=" or
+          . == "%=" or
+          . == "//" then
         # transform <lhr> <op> <rhs> to _assign/_update(lhr; "<op>"; rhs)
         _e(
           {
@@ -2811,7 +2832,8 @@ def parse_options:
       // option(null; "lex"; .mode = "lex")
       // option(null; "parse"; .mode = "parse")
       // option(null; "no-builtins"; .no_builtins = true)
-      // ( if .args.is_short then "-\(.args.curr[:1])" else "--\(.args.curr)" end
+      //
+      ( if .args.is_short then "-\(.args.curr[:1])" else "--\(.args.curr)" end
           | "Unknown option: \(.)" | die
       )
     );
@@ -2916,9 +2938,8 @@ def jqjq($args; $env):
         )
         else $default
         end
-        | if $opts.no_color_output or (
-          ($opts.color_output | not) and ($env.NO_COLOR | . != null and . != "")
-        ) then
+        | if $opts.no_color_output or
+        (($opts.color_output | not) and ($env.NO_COLOR | . != null and . != "")) then
         null
         end
         | if . != null then map("\u001b[\(.)m") end
@@ -3025,14 +3046,15 @@ def jqjq($args; $env):
               | if $l | test("^\\s*#") then .
               elif $l | test("^\\s*$") then
               if .expr then
-              ( .emit = { line
-                        , nr
-                        , expr
-                        , input
-                        , output
-                        , fail
-                        , error
-                        }
+              ( .emit =
+              { line
+              , nr
+              , expr
+              , input
+              , output
+              , fail
+              , error
+              }
                   | .nr += 1
               )
               else .

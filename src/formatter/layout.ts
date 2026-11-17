@@ -13,7 +13,7 @@ import { LineBuilder, trimLineEnd } from './emit'
 import { Measure } from './measure'
 import { Predict } from './predict'
 import { CLOSERS, OPENERS, gapBetween, padsInsideBracket, type FmtToken } from './spacing'
-import { TokenStream, endCol, endLine } from './tokens'
+import { TokenStream, endCol, endLine, newlinesBetween } from './tokens'
 
 /**
  * 保留的连续空行上限：源码空行原样保留、绝不凭空增加，
@@ -230,13 +230,17 @@ export class Layout {
 
     // 相位 1：当前 token 自身
     switch (breakBefore(this.#st, i)) {
-      case 'pipe':
+      case 'pipe': {
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
-        // 断行（比上下文深一层）
-        if (!inlineInnermost && (nl > 0 || this.#m.pipeOverflow(i))) {
+        // 断行（比上下文深一层）。尾随风格（'|' 之后源码已换行）不
+        // 抢断：下一片段反正会另起一行，交给 afterBinop 按源码保留
+        const next = this.#tokens[i + 1]
+        const trailing = !!next && newlinesBetween(t, next) > 0
+        if (!inlineInnermost && (nl > 0 || (this.#m.pipeOverflow(i) && !trailing))) {
           indent = this.#ctxIndent + this.#opts.indentSize
         }
         break
+      }
       case 'closer':
         // 展开组的闭括号：前导分隔符风格的悬挂组回到开括号所在列，
         // 其余悬挂组与分隔式回到开括号所在行的行首；悬挂式且源码闭括号
@@ -246,13 +250,17 @@ export class Layout {
             innerGroup.hanging && innerGroup.leadSep ? innerGroup.alignCol : innerGroup.closeIndent
         }
         break
-      case 'binop':
-        // 双目运算符：源码此处有换行，或其后的片段放不进本行，则以
-        // 行首运算符断行，与本行（表达式起始行）同层
-        if (!inlineInnermost && (nl > 0 || this.#m.operatorOverflow(i))) {
+      case 'binop': {
+        // 双目运算符（含关键字 and/or）：源码此处有换行，或其后的
+        // 片段放不进本行，则以行首运算符断行，与本行（表达式起始行）
+        // 同层。尾随风格（运算符之后源码已换行）不抢断，理由同 pipe
+        const next = this.#tokens[i + 1]
+        const trailing = !!next && newlinesBetween(t, next) > 0
+        if (!inlineInnermost && (nl > 0 || (this.#m.operatorOverflow(i) && !trailing))) {
           indent = this.#out.indentCols
         }
         break
+      }
       case 'leadSep':
         // 前导分隔符：悬挂组里源码在 ','/';' 之前换行时，分隔符提到
         // 行首，与开括号同列对齐（与前导双目运算符同一种风格，
@@ -285,6 +293,12 @@ export class Layout {
         if (!afterHangingOpener && !inlineInnermost) indent = this.#ctxIndent
         break
       }
+      case 'reduce':
+        // reduce/foreach 分组的 '('：源码在 as 绑定模式之后换行时
+        // 原样保留，缩进比 as 所在行深一层。不主动断行 —— 组自身
+        // 的展开与分隔符断行自会处理超宽
+        if (nl > 0) indent = this.#out.indentCols + this.#opts.indentSize
+        break
     }
 
     // 相位 2：前一个代码 token 之后（prevRealIdx 跳过注释）
@@ -333,6 +347,17 @@ export class Layout {
           //（与子句关键字同层，但不浅于所在括号组的内容层）；elif 后是
           // 条件而非分支，回到上下文缩进。'end' 之后不另起分支行。
           if (p.text !== 'end' && nl > 0) indent = this.#bodyIndent?.indent ?? this.#ctxIndent
+          break
+        case 'afterBinop':
+          // 双目运算符/管道之后（尾随风格）源码换行：操作数另起一行，
+          // 尊重源码的折行选择。缩进与对应的行首风格一致：管道比上下文
+          // 深一层，其余与运算符所在行同层
+          if (nl > 0) {
+            indent =
+              p.text === '|'
+                ? this.#ctxIndent + this.#opts.indentSize
+                : this.#out.indentCols
+          }
           break
       }
     }

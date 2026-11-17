@@ -13,26 +13,33 @@
  *    不另起分支行）；
  *  - afterColon：predict 一律视为断点，decide 再按 def 记账与所在
  *    括号种类细分（def 头冒号要求全部组展开，对象冒号只要求最内层
- *    大括号组展开，切片冒号不断行）。
+ *    大括号组展开，切片冒号不断行）；
+ *  - reduce：无超宽补断，只在源码确有换行时才真的断行 ——
+ *    measure 的 findSegmentEnd 与 predict 的 firstSeparator 仅在
+ *    换行存在时把它当片段边界，未换行时片段要跨过 reduce 分组
+ *    继续量宽；
+ *  - afterBinop：decide 与 predict 两侧都只认源码换行（不补断）。
  */
 import { CLAUSE_KEYWORDS, CLOSERS, LINE_BREAK_BINOPS, OPENERS, type FmtToken } from './spacing'
 import type { TokenStream } from './tokens'
 
 /**
- * 断点种类。前六种断在 tokens[k] 之前（k 自身是断点 token），
- * 后四种断在 tokens[k] 之后（k 是触发 token）。
+ * 断点种类。前七种断在 tokens[k] 之前（k 自身是断点 token），
+ * 后五种断在 tokens[k] 之后（k 是触发 token）。
  */
 export type BreakKind =
   | 'pipe' // '|' 之前：行首管道，比上下文深一层
   | 'closer' // 闭括号之前：按组风格回缩
-  | 'binop' // 可行首双目运算符之前：与本行同层
+  | 'binop' // 可行首双目运算符（含关键字 and/or，非对象键）之前：与本行同层
   | 'leadSep' // ','/';' 之前：悬挂组内前导分隔符，对齐开括号列
   | 'clause' // 子句关键字之前（非对象键）：回到 if/try 所在行的行首
   | 'def' // def 之前（非对象键）：总起新行
+  | 'reduce' // reduce/foreach 分组的 '(' 之前（as 绑定模式之后）：深一层
   | 'afterSep' // ','/';' 之后：元素另起一行
   | 'afterColon' // ':' 之后：decide 再按 def 记账/括号种类细分
   | 'afterOpener' // 分隔式展开组开括号之后：首元素另起一行
   | 'afterClause' // 子句关键字之后：分支内容另起一行
+  | 'afterBinop' // 双目运算符/管道之后（尾随风格）：操作数另起一行
 
 /** 可作行首断点的双目运算符（一元 '-' 除外） */
 export function isLineBreakBinop(t: FmtToken): boolean {
@@ -40,8 +47,43 @@ export function isLineBreakBinop(t: FmtToken): boolean {
 }
 
 /**
+ * tokens[k] 的 '(' 是否紧跟 as 绑定模式 —— 即 reduce/foreach 的分组
+ * 开括号（管道绑定 `as $x |` 之后只会是 '|'，析构备选 `?//` 不以
+ * '(' 收尾，故「模式之后直接 '('」唯一对应 reduce/foreach）。模式
+ * 形如 '$var' 或 '[…]'（嵌套析构由括号配对回溯到最外层 '['）。
+ */
+function afterAsPattern(st: TokenStream, k: number): boolean {
+  const prev = st.tokens[k - 1]
+  if (prev === undefined) return false
+  let j: number
+  if (prev.type === 'variable') {
+    j = k - 2
+  } else if (prev.type === 'operator' && prev.text === ']') {
+    // 回溯找配对的 '['（match 只存开括号→闭括号方向）
+    let depth = 0
+    let open = -1
+    for (let p = k - 1; p >= 0; p--) {
+      const t = st.tokens[p]
+      if (t.type === 'operator' && t.text === ']') depth++
+      else if (t.type === 'operator' && t.text === '[') {
+        if (--depth === 0) {
+          open = p
+          break
+        }
+      }
+    }
+    if (open < 0) return false
+    j = open - 1
+  } else {
+    return false
+  }
+  const asTok = st.tokens[j]
+  return asTok !== undefined && asTok.type === 'keyword' && asTok.text === 'as'
+}
+
+/**
  * tokens[k] 自身作为断点 token（断点在 k 之前）的种类；null = 不是
- * 断点。对象键关键字（`{if: 1}`）不算子句/def 断点。
+ * 断点。对象键关键字（`{if: 1}`、`{or: 1}`）不算子句/def/双目断点。
  */
 export function breakBefore(st: TokenStream, k: number): BreakKind | null {
   const tk = st.tokens[k]
@@ -50,11 +92,14 @@ export function breakBefore(st: TokenStream, k: number): BreakKind | null {
     if (CLOSERS.has(tk.text)) return 'closer'
     if (isLineBreakBinop(tk)) return 'binop'
     if (tk.text === ',' || tk.text === ';') return 'leadSep'
+    if (tk.text === '(' && afterAsPattern(st, k)) return 'reduce'
     return null
   }
   if (tk.type === 'keyword' && !st.objectKey[k]) {
     if (CLAUSE_KEYWORDS.has(tk.text)) return 'clause'
     if (tk.text === 'def' && k > 0) return 'def'
+    // and/or 是关键字形态的双目运算符，与运算符形态一视同仁
+    if (tk.text === 'and' || tk.text === 'or') return 'binop'
   }
   return null
 }
@@ -70,8 +115,12 @@ export function breakAfter(st: TokenStream, k: number): BreakKind | null {
     if (tk.text === ',' || tk.text === ';') return 'afterSep'
     if (tk.text === ':') return 'afterColon'
     if (OPENERS.has(tk.text)) return 'afterOpener'
+    if (tk.text === '|' || isLineBreakBinop(tk)) return 'afterBinop'
     return null
   }
-  if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text)) return 'afterClause'
+  if (tk.type === 'keyword') {
+    if (CLAUSE_KEYWORDS.has(tk.text)) return 'afterClause'
+    if ((tk.text === 'and' || tk.text === 'or') && !st.objectKey[k]) return 'afterBinop'
+  }
   return null
 }

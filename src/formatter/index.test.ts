@@ -337,6 +337,53 @@ test('then stays on the elif line when the source breaks after it', () => {
   assert.equal(fmt('if .a then .b\nelse .c\nend'), 'if .a then .b\nelse .c\nend\n')
 })
 
+test('source break after a reduce as-pattern is preserved', () => {
+  // reduce/foreach 分组的 '(' 之前源码换行：原样保留，缩进比 as 行
+  // 深一层（jqjq 语料 41 行的形态）
+  assert.equal(
+    fmt('reduce ($paths | unique | reverse)[] as $p\n  (.; _delpath($p));'),
+    'reduce ($paths | unique | reverse)[] as $p\n  (.; _delpath($p));\n'
+  )
+  // 析构模式同样适用
+  assert.equal(
+    fmt('foreach .[] as [$k, $v]\n  (0; . + [$k]; .)'),
+    'foreach .[] as [$k, $v]\n  (0; . + [$k]; .)\n'
+  )
+  // 源码未换行：不主动断行，单行保持
+  assert.equal(
+    fmt('reduce ($paths | unique | reverse)[] as $p (.; _delpath($p));'),
+    'reduce ($paths | unique | reverse)[] as $p (.; _delpath($p));\n'
+  )
+})
+
+test('trailing-style binop and pipe breaks are preserved', () => {
+  // 运算符留在行尾的折行（尾随风格）与行首风格同样尊重源码：
+  // 双目运算符之后的操作数与本行同层，管道之后深一层
+  assert.equal(
+    fmt('if $op | . == "=" or\n  . == "|=" or\n  . == "+=" then 1 else 2 end'),
+    'if $op | . == "=" or\n. == "|=" or\n. == "+=" then 1 else 2 end\n'
+  )
+  assert.equal(fmt('.a //\n  .b'), '.a //\n.b\n')
+  assert.equal(fmt('.a |\n  b'), '.a |\n  b\n')
+  // 行首风格（运算符提到下一行行首）行为不变
+  assert.equal(
+    fmt('if $op | . == "="\n  or . == "|="\n  or . == "+=" then 1 else 2 end'),
+    'if $op | . == "="\nor . == "|="\nor . == "+=" then 1 else 2 end\n'
+  )
+  // 源码未换行：不主动断行
+  assert.equal(fmt('.a // .b'), '.a // .b\n')
+  assert.equal(fmt('true and false or null'), 'true and false or null\n')
+})
+
+test('trailing break suppresses the leading overflow break at the same operator', () => {
+  // 尾随风格已折行的运算符不抢断：不把折行挪到运算符之前；源码
+  // 未折行且超宽的运算符仍做行首补断
+  const src = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\n  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb or c'
+  const once = fmt(src, 60)
+  assert.equal(once, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nor c\n')
+  assert.equal(fmt(once, 60), once)
+})
+
 test('idempotency', () => {
   const samples = [
     'def f(a;b):.a|f;\n.x as $v|$v|f(1;2)',
