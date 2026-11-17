@@ -11,14 +11,9 @@ import type { FormatOptions } from './api'
 import { breakAfter, breakBefore } from './breakkind'
 import { LineBuilder, trimLineEnd } from './emit'
 import { Measure } from './measure'
+import { Predict } from './predict'
 import { CLOSERS, OPENERS, gapBetween, padsInsideBracket, type FmtToken } from './spacing'
-import {
-  MAX_SEGMENT_LOOKAHEAD,
-  TokenStream,
-  endCol,
-  endLine,
-  newlinesBetween
-} from './tokens'
+import { TokenStream, endCol, endLine } from './tokens'
 
 /**
  * 保留的连续空行上限：源码空行原样保留、绝不凭空增加，
@@ -115,18 +110,21 @@ export class Layout {
     private readonly opts: FormatOptions,
     private readonly out: LineBuilder
   ) {
-    // 便捷别名：token 与括号配对是最高频的访问
+    // 便捷别名：token 序列是最高频的访问
     this.tokens = st.tokens
-    this.match = st.match
     // 行宽测量：col 回调让测量读到活的发射进度，又不触碰发射状态
     this.m = new Measure(st, opts, () => out.col())
+    // 源码断行推断：与测量共用 token 流，同样只读发射进度
+    this.predict = new Predict(st, opts, this.m, () => out.col())
   }
 
   /** 行宽测量（见 measure.ts） */
   private readonly m: Measure
 
+  /** 源码断行推断（见 predict.ts） */
+  private readonly predict: Predict
+
   private readonly tokens: readonly FmtToken[]
-  private readonly match: ReadonlyMap<number, number>
 
   run(): void {
     for (let i = 0; i < this.tokens.length; i++) {
@@ -360,7 +358,7 @@ export class Layout {
 
     if (t.type === 'operator') {
       if (OPENERS.has(t.text)) {
-        const style = this.groupStyle(i)
+        const style = this.predict.groupStyle(i)
         this.groups.push({
           kind: t.text as '(' | '[' | '{',
           expanded: style.expanded,
@@ -431,202 +429,18 @@ export class Layout {
     }
   }
 
-  // -- 源码断行推断 --------------------------------------------------------
-
   /**
-   * tokens[i] 的开括号组布局。是否展开与原先一致：源码组内有换行、
-   * 含注释，或平铺后放不进本行。展开的组再分两种风格：
-   *   - 悬挂式：源码里开括号后接了内容（且首个元素放得进开括号行），
-   *     不强制断行，组内换行按源码保留，超宽才在分隔符处补断；
-   *   - 分隔式：开括号、每个元素、闭括号各占一行。
-   * leadSep 标记组内是否用了前导分隔符风格（见 GroupCtx）。
-   */
-  private groupStyle(i: number): { expanded: boolean; hanging: boolean; leadSep: boolean } {
-    const close = this.match.get(i)!
-    const leadSep = this.hasLeadingSeparator(i, close)
-    if (close === i + 1) return { expanded: false, hanging: false, leadSep } // 空组
-    let prevEnd = endLine(this.tokens[i])
-    let sourceBreak = false
-    let hasComment = false
-    for (let k = i + 1; k < close; k++) {
-      const tk = this.tokens[k]
-      if (tk.line > prevEnd) sourceBreak = true
-      if (tk.type === 'comment') hasComment = true
-      prevEnd = endLine(tk)
-    }
-    if (this.tokens[close].line > prevEnd) sourceBreak = true
-    if (!sourceBreak && !hasComment) {
-      // 源码单行：放得下就单行，放不下走分隔式
-      const flat = this.m.flatSpan(i + 1, close, this.tokens[i].text)
-      if (flat === null) return { expanded: true, hanging: false, leadSep }
-      // 内侧补位空格（只有大括号组补）+ 闭括号
-      const extra = this.tokens[i].text === '{' ? 3 : 1
-      return {
-        expanded: this.out.col() + flat.length + extra > this.opts.printWidth,
-        hanging: false,
-        leadSep
-      }
-    }
-    // 源码多行或含注释。但组内未必真的会断行：换行可能全落在会折叠
-    // 的位置（表达式中间、前导逗号之前……）。会断行的才展开。
-    if (!this.groupBreaks(i, close)) {
-      // 意图是单行：放得下就按单行处理（内侧补空格）
-      const flat = this.m.flatSpan(i + 1, close, this.tokens[i].text)
-      // 此分支内不会有注释，flat 不会为 null
-      const extra = this.tokens[i].text === '{' ? 3 : 1
-      if (flat !== null && this.out.col() + flat.length + extra <= this.opts.printWidth) {
-        return { expanded: false, hanging: false, leadSep }
-      }
-    }
-    // 展开且会断行：首个内容在开括号行、且首个元素放得进该行，
-    // 用悬挂式；否则分隔式。开括号行上的行尾注释不参与宽度测量
-    if (!this.firstOnOpenerLine(i, close)) return { expanded: true, hanging: false, leadSep }
-    const flat = this.m.flatSpan(i + 1, this.firstSeparator(i, close), this.tokens[i].text, true)
-    if (flat === null) return { expanded: true, hanging: false, leadSep }
-    // +2：开括号后的补位空格 + 其后的分隔符（或闭括号）
-    if (this.out.col() + flat.length + 2 > this.opts.printWidth) {
-      return { expanded: true, hanging: false, leadSep }
-    }
-    return { expanded: true, hanging: true, leadSep }
-  }
-
-  /** 组内顶层 ','/';' 之前是否有源码换行（前导分隔符风格） */
-  private hasLeadingSeparator(i: number, close: number): boolean {
-    let depth = 0
-    for (let k = i + 1; k < close; k++) {
-      const tk = this.tokens[k]
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-      else if (depth === 0 && (tk.text === ',' || tk.text === ';')) {
-        const prev = this.tokens[k - 1]
-        if (newlinesBetween(prev, tk) > 0) return true
-      }
-    }
-    return false
-  }
-
-  /**
-   * 组内是否会实际断行（按源码推断，忽略超宽补断）：合法断点处有
-   * 换行、有注释、或有不处于行首的 def。嵌套组递归处理 —— 嵌套组
-   * 若同样不会断行则渲染为单行，不算外层的断行。调用方只在整组
-   * 平铺放得下时据此判单行，那时超宽断行不会触发，推断是精确的。
-   */
-  private groupBreaks(i: number, close: number): boolean {
-    for (let k = i + 1; k < close; k++) {
-      const tk = this.tokens[k]
-      if (tk.type === 'comment') return true
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) {
-        const innerClose = this.match.get(k)!
-        if (this.groupBreaks(k, innerClose)) return true
-        k = innerClose // 跳过整个嵌套组
-        continue
-      }
-      const prev = this.tokens[k - 1]
-      // 展开组内的 def 总会断行；紧跟开括号且同行的除外（悬挂式例外）。
-      // 与源码换行无关：decideBreak 对展开组内的 def 总是断行，若只在
-      // 未换行的分支计入，源码恰好在 def 之前换行的组被误判成单行，
-      // def 被折叠进行中。
-      if (breakBefore(this.st, k) === 'def' && k > i + 1) {
-        return true
-      }
-      if (newlinesBetween(prev, tk) <= 0) {
-        continue
-      }
-      // 源码此处有换行：只有落在合法断点处才会真的断行
-      if (k === i + 1) return true // 开括号后首内容换行：展开必断
-      // 行首管道/双目运算符/前导分隔符/子句关键字（见 decideBreak）
-      const bk = breakBefore(this.st, k)
-      if (bk === 'pipe' || bk === 'binop' || bk === 'leadSep' || bk === 'clause') return true
-      // 分隔符或子句关键字之后的换行：元素/分支另起一行（见 decideBreak）
-      const ak = breakAfter(this.st, k - 1)
-      if (ak === 'afterSep' || ak === 'afterClause') return true
-    }
-    const last = this.tokens[close - 1]
-    return this.tokens[close].line > endLine(last)
-  }
-
-  /**
-   * 组内首个 token（注释也算）是否与开括号同行 —— 行尾注释同样是
-   * “开括号后接了内容”，组按悬挂式处理（注释自己会结束这一行，
-   * 首个元素从下一行开始）。
-   */
-  private firstOnOpenerLine(i: number, close: number): boolean {
-    return close > i + 1 && this.tokens[i + 1].line === this.tokens[i].line
-  }
-
-  /**
-   * 组内第一个顶层断点候选（','、';'、'|' 或子句关键字）的下标；
-   * 没有则为闭括号下标。用于测量悬挂式开括号行的宽度。
-   */
-  private firstSeparator(i: number, close: number): number {
-    let depth = 0
-    for (let k = i + 1; k < close; k++) {
-      const tk = this.tokens[k]
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-      else if (depth === 0) {
-        // 悬挂式开括号行的首个宽度预算断点：前导分隔符、行首管道/
-        // 双目运算符或子句关键字（def 不在其列）
-        const bk = breakBefore(this.st, k)
-        if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
-      }
-    }
-    return close
-  }
-
-  /**
-   * 组内 ','/';' 之后的元素是否另起一行。分隔式展开组总是断行；
-   * 悬挂式保留源码换行，元素内部自己会断行时把超宽交给元素自己的
-   * 断点（否则前导分隔符会孤零零留在行尾），其余情况仅当元素续在
-   * 本行会超宽时补断。
+   * 组内 ','/';' 之后的元素是否另起一行（decide 侧策略：读活的组栈，
+   * 故留在本文件）。分隔式展开组总是断行；悬挂式保留源码换行，
+   * 元素内部自己会断行时把超宽交给元素自己的断点（否则前导分隔符
+   * 会孤零零留在行尾），其余情况仅当元素续在本行会超宽时补断。
    */
   private separatorBreaks(nl: number, i: number): boolean {
     const g = this.groups[this.groups.length - 1]
     if (!g?.expanded) return false
     if (!g.hanging) return true
     if (nl > 0) return true
-    return !this.elementBreaks(i) && this.m.elementOverflow(i)
-  }
-
-  /**
-   * 悬挂组内从 tokens[j] 起的当前元素内部是否会断行（按源码推断）。
-   * 元素到同层的下一个分隔符或闭括号为止；嵌套组递归用 groupBreaks
-   * 判断（不会断行的组渲染为单行，整组跳过）。判断与 decideBreak
-   * 的断点保持一致：行首管道/双目运算符/子句关键字、对象键冒号后的
-   * 换行、注释。
-   */
-  private elementBreaks(j: number): boolean {
-    const cap = Math.min(this.tokens.length, j + MAX_SEGMENT_LOOKAHEAD)
-    for (let k = j; k < cap; k++) {
-      const tk = this.tokens[k]
-      if (k > j) {
-        if (tk.type === 'comment') return true
-        // 元素边界：同层分隔符或闭括号
-        if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';' || CLOSERS.has(tk.text))) {
-          return false
-        }
-        const prev = this.tokens[k - 1]
-        if (newlinesBetween(prev, tk) <= 0) continue
-        // 源码此处有换行：落在合法断点上才会真的断行
-        const bk = breakBefore(this.st, k)
-        if (bk === 'pipe' || bk === 'binop' || bk === 'clause') return true
-        const ak = breakAfter(this.st, k - 1)
-        // 冒号之后换行：值另起一行。predict 侧不区分冒号种类（对象键/
-        // def 头/切片），一律算断 —— decide 侧的细分见 decideBreak
-        if (ak === 'afterColon') return true
-        // 子句关键字之后换行：分支内容另起一行（见 decideBreak）
-        if (ak === 'afterClause') return true
-      } else if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) {
-        return false // 空元素（j 本身就是分隔符）
-      }
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) {
-        // 嵌套组：组内会断行则元素内部断行；否则整组跳过（渲染为单行）
-        const innerClose = this.match.get(k)!
-        if (this.groupBreaks(k, innerClose)) return true
-        k = innerClose // 跳过整个嵌套组
-      }
-    }
-    return false
+    return !this.predict.elementBreaks(i) && this.m.elementOverflow(i)
   }
 
   // -- 子句栈 --------------------------------------------------------------
