@@ -8,11 +8,10 @@
  */
 
 import type { FormatOptions } from './api'
+import { breakAfter, breakBefore } from './breakkind'
 import { LineBuilder, trimLineEnd } from './emit'
 import {
-  CLAUSE_KEYWORDS,
   CLOSERS,
-  LINE_BREAK_BINOPS,
   OPENERS,
   gapBetween,
   padsInsideBracket,
@@ -123,6 +122,8 @@ export class Layout {
    */
   private bodyIndent: { indent: number; depth: number } | null = null
   private prevReal: FmtToken | undefined
+  /** prevReal 在 token 流中的下标（-1 = 还没有）；跳过注释 */
+  private prevRealIdx = -1
   /** 上一个已发射内容（代码 token 或注释）的结束行号 */
   private lastAnyEndLine = -1
 
@@ -178,6 +179,7 @@ export class Layout {
       // -- 记账：语法上下文与游标 --
       this.updateContexts(t, i)
       this.prevReal = t
+      this.prevRealIdx = i
       this.lastAnyEndLine = endLine(t)
     }
     if (this.out.hasContent) this.out.finishLine()
@@ -229,27 +231,27 @@ export class Layout {
 
   /**
    * 断行决策（先命中先生效）：
-   *   1. 当前 token 自身（'|'、闭括号、子句关键字、def）；
-   *   2. 前一个代码 token 之后（';'/','/':'/开括号）；
+   *   1. 当前 token 自身是断点 token（词汇见 breakkind.ts）；
+   *   2. 前一个代码 token 之后是断点（跳过注释）；
    *   3. 行尾注释留下的强制断行。
    */
   private decideBreak(i: number, nl: number, forced: boolean): BreakDecision {
     const t = this.tokens[i]
     const innerGroup = this.groups[this.groups.length - 1]
     const inlineInnermost = this.groups.length > 0 && !innerGroup.expanded
-    // `{if: 1}` —— 关键字作为对象键，不是子句/def 关键字
-    const objectKey = this.st.objectKey[i]
 
     let indent: number | null = null
 
-    if (t.type === 'operator') {
-      if (t.text === '|') {
+    // 相位 1：当前 token 自身
+    switch (breakBefore(this.st, i)) {
+      case 'pipe':
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
         // 断行（比上下文深一层）
         if (!inlineInnermost && (nl > 0 || this.pipeOverflow(i))) {
           indent = this.ctxIndent + this.opts.indentSize
         }
-      } else if (CLOSERS.has(t.text)) {
+        break
+      case 'closer':
         // 展开组的闭括号：前导分隔符风格的悬挂组回到开括号所在列，
         // 其余悬挂组与分隔式回到开括号所在行的行首；悬挂式且源码闭括号
         // 未换行时，留在最后一个元素所在的行内
@@ -257,29 +259,34 @@ export class Layout {
           indent =
             innerGroup.hanging && innerGroup.leadSep ? innerGroup.alignCol : innerGroup.closeIndent
         }
-      } else if (this.isBinop(t) && !inlineInnermost && (nl > 0 || this.operatorOverflow(i))) {
+        break
+      case 'binop':
         // 双目运算符：源码此处有换行，或其后的片段放不进本行，则以
         // 行首运算符断行，与本行（表达式起始行）同层
-        indent = this.out.indentCols
-      } else if (
-        (t.text === ',' || t.text === ';') &&
-        innerGroup !== undefined &&
-        innerGroup.expanded &&
-        innerGroup.hanging &&
-        nl > 0
-      ) {
+        if (!inlineInnermost && (nl > 0 || this.operatorOverflow(i))) {
+          indent = this.out.indentCols
+        }
+        break
+      case 'leadSep':
         // 前导分隔符：悬挂组里源码在 ','/';' 之前换行时，分隔符提到
         // 行首，与开括号同列对齐（与前导双目运算符同一种风格，
         // jq 源码里常见）
-        indent = innerGroup.alignCol
-      }
-    } else if (t.type === 'keyword' && !objectKey) {
-      if (CLAUSE_KEYWORDS.has(t.text)) {
+        if (
+          innerGroup !== undefined &&
+          innerGroup.expanded &&
+          innerGroup.hanging &&
+          nl > 0
+        ) {
+          indent = innerGroup.alignCol
+        }
+        break
+      case 'clause':
         // 子句关键字：源码有换行或行宽不够时，回到 if/try 所在行的行首
         if (!inlineInnermost && (nl > 0 || this.clauseOverflow(i))) {
           indent = this.findClauseIndent(t.text === 'catch' ? 'try' : 'if') ?? this.ctxIndent
         }
-      } else if (t.text === 'def' && i > 0) {
+        break
+      case 'def': {
         // def 总是从新行开始（空行保留与断行原因无关，统一按源码处理）；
         // 例外：悬挂式开括号行上的 def（否则悬挂排列被破坏，反复格式化
         // 结果不稳定），以及未展开组内的 def（组保持单行）
@@ -290,27 +297,32 @@ export class Layout {
           OPENERS.has(p.text) &&
           (this.groups[this.groups.length - 1]?.hanging ?? false)
         if (!afterHangingOpener && !inlineInnermost) indent = this.ctxIndent
+        break
       }
     }
 
-    if (indent === null && this.prevReal) {
-      const p = this.prevReal
-      if (p.type === 'operator') {
-        if (p.text === ';') {
-          // def 结束的 ';'：语句级回到 ctxIndent；组内按组风格断行
-          if (this.groups.length === 0) {
-            indent = this.ctxIndent
-          } else if (this.separatorBreaks(nl, i)) {
-            indent = this.ctxIndent
+    // 相位 2：前一个代码 token 之后（prevRealIdx 跳过注释）
+    if (indent === null && this.prevRealIdx >= 0) {
+      const p = this.tokens[this.prevRealIdx]
+      switch (breakAfter(this.st, this.prevRealIdx)) {
+        case 'afterSep':
+          if (p.text === ';') {
+            // def 结束的 ';'：语句级回到 ctxIndent；组内按组风格断行
+            if (this.groups.length === 0) {
+              indent = this.ctxIndent
+            } else if (this.separatorBreaks(nl, i)) {
+              indent = this.ctxIndent
+            }
+          } else {
+            // 逗号：语句级保留源码换行；组内按组风格断行
+            if (this.groups.length === 0) {
+              if (nl > 0) indent = this.ctxIndent
+            } else if (this.separatorBreaks(nl, i)) {
+              indent = this.ctxIndent
+            }
           }
-        } else if (p.text === ',') {
-          // 逗号：语句级保留源码换行；组内按组风格断行
-          if (this.groups.length === 0) {
-            if (nl > 0) indent = this.ctxIndent
-          } else if (this.separatorBreaks(nl, i)) {
-            indent = this.ctxIndent
-          }
-        } else if (p.text === ':') {
+          break
+        case 'afterColon':
           if (this.def.lastColonWasDef) {
             // def 头部的 ':' 之后：所有括号组都展开时才允许换行
             if (nl > 0 && this.groups.every((g) => g.expanded)) indent = this.ctxIndent
@@ -323,19 +335,19 @@ export class Layout {
             // 对象键的冒号之后：源码换行处保留，值比键所在行深一层
             indent = this.out.indentCols + this.opts.indentSize
           }
-        } else if (OPENERS.has(p.text)) {
+          break
+        case 'afterOpener': {
           // 分隔式展开组的开括号之后：第一个元素另起一行（悬挂式不断）
           const g = this.groups[this.groups.length - 1]
           if (g?.expanded && !g.hanging) indent = this.ctxIndent
+          break
         }
-      } else if (
-        p.type === 'keyword' &&
-        (p.text === 'then' || p.text === 'elif' || p.text === 'else' || p.text === 'catch')
-      ) {
-        // 子句关键字之后源码换行：分支内容另起一行，缩进取分支缩进
-        //（与子句关键字同层，但不浅于所在括号组的内容层）；elif 后是
-        // 条件而非分支，回到上下文缩进
-        if (nl > 0) indent = this.bodyIndent?.indent ?? this.ctxIndent
+        case 'afterClause':
+          // 子句关键字之后源码换行：分支内容另起一行，缩进取分支缩进
+          //（与子句关键字同层，但不浅于所在括号组的内容层）；elif 后是
+          // 条件而非分支，回到上下文缩进。'end' 之后不另起分支行。
+          if (p.text !== 'end' && nl > 0) indent = this.bodyIndent?.indent ?? this.ctxIndent
+          break
       }
     }
 
@@ -475,22 +487,8 @@ export class Layout {
       const tk = this.tokens[k]
       if (k > j) {
         if (tk.type === 'comment') return k // 注释永远终结它所在的一行
-        if (depth === 0) {
-          if (
-            tk.type === 'operator' &&
-            (tk.text === '|' || tk.text === ';' || tk.text === ',' || CLOSERS.has(tk.text))
-          ) {
-            return k
-          }
-          if (tk.type === 'operator' && this.isBinop(tk)) return k
-          if (
-            tk.type === 'keyword' &&
-            (CLAUSE_KEYWORDS.has(tk.text) || tk.text === 'def') &&
-            !this.st.objectKey[k]
-          ) {
-            return k
-          }
-        }
+        // 深度 0 的任意断点种类都终结片段（词汇表的全集）
+        if (depth === 0 && breakBefore(this.st, k) !== null) return k
       }
       if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
@@ -511,11 +509,6 @@ export class Layout {
   private pipeOverflow(i: number): boolean {
     const seg = this.segmentWidth(i + 1)
     return seg === Infinity || this.out.col() + 3 + seg > this.opts.printWidth
-  }
-
-  /** 可在行首断行的双目运算符（一元 '-' 除外） */
-  private isBinop(t: FmtToken): boolean {
-    return t.type === 'operator' && LINE_BREAK_BINOPS.has(t.text) && !(t.text === '-' && t.unary)
   }
 
   /** 双目运算符续在本行是否会超宽（运算符两侧各一个空格 + 其后片段）。 */
@@ -633,32 +626,22 @@ export class Layout {
       const prev = this.tokens[k - 1]
       // 展开组内的 def 总会断行；紧跟开括号且同行的除外（悬挂式例外）。
       // 与源码换行无关：decideBreak 对展开组内的 def 总是断行，若只在
-      // 未换行的分支计入，源码恰好在 def 之前换行的组会被误判成单行，
+      // 未换行的分支计入，源码恰好在 def 之前换行的组被误判成单行，
       // def 被折叠进行中。
-      if (
-        tk.type === 'keyword' &&
-        tk.text === 'def' &&
-        !this.st.objectKey[k] &&
-        k > i + 1
-      ) {
+      if (breakBefore(this.st, k) === 'def' && k > i + 1) {
         return true
       }
-      const nl = newlinesBetween(prev, tk)
-      if (nl <= 0) {
+      if (newlinesBetween(prev, tk) <= 0) {
         continue
       }
       // 源码此处有换行：只有落在合法断点处才会真的断行
       if (k === i + 1) return true // 开括号后首内容换行：展开必断
-      if (tk.type === 'operator' && tk.text === '|') return true
-      if (tk.type === 'operator' && this.isBinop(tk)) return true
-      // 前导分隔符：悬挂组里会以行首 ','/';' 断行（见 decideBreak）
-      if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) return true
-      if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]) {
-        return true
-      }
-      // 子句关键字之后的换行：分支内容另起一行（见 decideBreak）
-      if (prev.type === 'keyword' && CLAUSE_KEYWORDS.has(prev.text)) return true
-      if (prev.type === 'operator' && (prev.text === ',' || prev.text === ';')) return true
+      // 行首管道/双目运算符/前导分隔符/子句关键字（见 decideBreak）
+      const bk = breakBefore(this.st, k)
+      if (bk === 'pipe' || bk === 'binop' || bk === 'leadSep' || bk === 'clause') return true
+      // 分隔符或子句关键字之后的换行：元素/分支另起一行（见 decideBreak）
+      const ak = breakAfter(this.st, k - 1)
+      if (ak === 'afterSep' || ak === 'afterClause') return true
     }
     const last = this.tokens[close - 1]
     return this.tokens[close].line > endLine(last)
@@ -683,13 +666,11 @@ export class Layout {
       const tk = this.tokens[k]
       if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-      else if (
-        depth === 0 &&
-        ((tk.type === 'operator' &&
-          (tk.text === ',' || tk.text === ';' || tk.text === '|' || this.isBinop(tk))) ||
-          (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]))
-      ) {
-        return k
+      else if (depth === 0) {
+        // 悬挂式开括号行的首个宽度预算断点：前导分隔符、行首管道/
+        // 双目运算符或子句关键字（def 不在其列）
+        const bk = breakBefore(this.st, k)
+        if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
       }
     }
     return close
@@ -727,17 +708,16 @@ export class Layout {
           return false
         }
         const prev = this.tokens[k - 1]
-        const nl = newlinesBetween(prev, tk)
-        if (nl <= 0) continue
+        if (newlinesBetween(prev, tk) <= 0) continue
         // 源码此处有换行：落在合法断点上才会真的断行
-        if (tk.type === 'operator' && (tk.text === '|' || this.isBinop(tk))) return true
-        if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]) {
-          return true
-        }
-        // 对象键的冒号之后换行：值另起一行（decideBreak 的对象冒号规则）
-        if (prev.type === 'operator' && prev.text === ':') return true
+        const bk = breakBefore(this.st, k)
+        if (bk === 'pipe' || bk === 'binop' || bk === 'clause') return true
+        const ak = breakAfter(this.st, k - 1)
+        // 冒号之后换行：值另起一行。predict 侧不区分冒号种类（对象键/
+        // def 头/切片），一律算断 —— decide 侧的细分见 decideBreak
+        if (ak === 'afterColon') return true
         // 子句关键字之后换行：分支内容另起一行（见 decideBreak）
-        if (prev.type === 'keyword' && CLAUSE_KEYWORDS.has(prev.text)) return true
+        if (ak === 'afterClause') return true
       } else if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) {
         return false // 空元素（j 本身就是分隔符）
       }
