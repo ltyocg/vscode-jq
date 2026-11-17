@@ -3,19 +3,19 @@
  * so it stays unit-testable.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'fs'
+import * as path from 'path'
 
 function isExecutableFile(p: string): boolean {
   try {
-    const st = fs.statSync(p);
-    if (!st.isFile()) return false;
+    const st = fs.statSync(p)
+    if (!st.isFile()) return false
     // Windows has no execute bit: statSync reports mode 0o666 for every
     // regular file, .exe included. Any regular file counts as runnable.
-    if (process.platform === 'win32') return true;
-    return (st.mode & 0o111) !== 0;
+    if (process.platform === 'win32') return true
+    return (st.mode & 0o111) !== 0
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -26,19 +26,19 @@ function isExecutableFile(p: string): boolean {
  * Returns undefined when nothing matches.
  */
 export function findExecutable(command: string): string | undefined {
-  if (command === '') return undefined;
+  if (command === '') return undefined
   if (command.includes('/') || command.includes('\\')) {
-    return isExecutableFile(command) ? command : undefined;
+    return isExecutableFile(command) ? command : undefined
   }
-  const dirs = (process.env.PATH ?? '').split(path.delimiter);
+  const dirs = (process.env.PATH ?? '').split(path.delimiter)
   for (const dir of dirs) {
-    if (dir === '') continue;
-    const candidate = path.join(dir, command);
-    if (isExecutableFile(candidate)) return candidate;
+    if (dir === '') continue
+    const candidate = path.join(dir, command)
+    if (isExecutableFile(candidate)) return candidate
     // Windows: PATHEXT is not modeled, but cover the common .exe case.
     if (process.platform === 'win32' && isExecutableFile(`${candidate}.exe`)) {
-      return `${candidate}.exe`;
+      return `${candidate}.exe`
     }
   }
-  return undefined;
+  return undefined
 }

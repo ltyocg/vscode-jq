@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "none",
+  "ignorePatterns": [
+    "dist/**",
+    "out/**",
+    "build/**",
+    "syntaxes/**",
+    "testdata/**",
+    "node_modules/**"
+  ]
+}

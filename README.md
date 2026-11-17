@@ -40,10 +40,10 @@ go install github.com/wader/jq-lsp@latest   # 从源码（装到 ~/go/bin）
 
 #### 设置
 
-| 设置 | 默认值 | 说明 |
-|---|---|---|
-| `jq.lsp.enabled` | `true` | 是否启动语言服务器（不影响格式化） |
-| `jq.lsp.path` | `jq-lsp` | jq-lsp 的命令名或绝对路径 |
+| 设置             | 默认值   | 说明                               |
+| ---------------- | -------- | ---------------------------------- |
+| `jq.lsp.enabled` | `true`   | 是否启动语言服务器（不影响格式化） |
+| `jq.lsp.path`    | `jq-lsp` | jq-lsp 的命令名或绝对路径          |
 
 ### 格式化
 
@@ -51,7 +51,7 @@ go install github.com/wader/jq-lsp@latest   # 从源码（装到 ~/go/bin）
 
 风格规则：
 
-- 默认 2 空格缩进，行宽超过 `jq.format.printWidth`（默认 80）时断行
+- 默认 2 空格缩进，行宽超过 `jq.format.printWidth`（默认 100）时断行
 - 管道断行采用前置 `|` 风格并缩进一级：
 
   ```jq
@@ -67,10 +67,10 @@ go install github.com/wader/jq-lsp@latest   # 从源码（装到 ~/go/bin）
 
 #### 设置
 
-| 设置 | 默认值 | 说明 |
-|---|---|---|
-| `jq.format.printWidth` | `80` | 触发断行的最大行宽 |
-| `jq.format.indentSize` | `2` | 每级缩进空格数 |
+| 设置                   | 默认值 | 说明               |
+| ---------------------- | ------ | ------------------ |
+| `jq.format.printWidth` | `100`  | 触发断行的最大行宽 |
+| `jq.format.indentSize` | `2`    | 每级缩进空格数     |
 
 > 目前仅支持整文档格式化（Format Document），暂不支持 Format Selection。
 

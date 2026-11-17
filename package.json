@@ -1,34 +1,51 @@
 {
   "name": "vscode-jq",
   "displayName": "jq Language Support",
-  "description": "Syntax highlighting, formatting and language-server features for the jq language (jqlang)",
   "version": "0.1.0",
-  "publisher": "gigaplant",
+  "description": "Syntax highlighting, formatting and language-server features for the jq language (jqlang)",
+  "categories": [
+    "Formatters",
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "formatter",
+    "highlighting",
+    "jq",
+    "jqlang",
+    "language server",
+    "lsp"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/gigaplant/vscode-jq"
   },
-  "engines": {
-    "vscode": "^1.146.0"
-  },
-  "categories": [
-    "Programming Languages",
-    "Formatters",
-    "Linters"
-  ],
-  "keywords": [
-    "jq",
-    "jqlang",
-    "highlighting",
-    "formatter",
-    "lsp",
-    "language server"
-  ],
-  "activationEvents": [
-    "onLanguage:jq"
-  ],
+  "publisher": "gigaplant",
   "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./ && node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p ./ --noEmit",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "tsc -p ./ && node --test \"out/**/*.test.js\"",
+    "package": "node -e \"fs.mkdirSync('build', {recursive: true})\" && vsce package --no-dependencies --out build/"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.146.0",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.2",
+    "oxfmt": "^0.78.0",
+    "typescript": "^7.0.2",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  },
   "contributes": {
     "languages": [
       {
@@ -55,7 +72,7 @@
       "properties": {
         "jq.format.printWidth": {
           "type": "integer",
-          "default": 80,
+          "default": 100,
           "minimum": 20,
           "description": "Maximum line width before the formatter breaks pipelines and lists."
         },
@@ -79,24 +96,7 @@
       }
     }
   },
-  "scripts": {
-    "vscode:prepublish": "pnpm run compile",
-    "compile": "tsc -p ./ && node esbuild.mjs --production",
-    "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc -p ./ --noEmit",
-    "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\"",
-    "package": "node -e \"fs.mkdirSync('build', {recursive: true})\" && vsce package --no-dependencies --out build/"
-  },
-  "dependencies": {
-    "vscode-languageclient": "^11.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^26.6.6",
-    "@types/vscode": "^1.146.0",
-    "@vscode/vsce": "^4.1.1",
-    "esbuild": "^0.28.2",
-    "typescript": "^7.0.2",
-    "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.3.2"
+  "engines": {
+    "vscode": "^1.146.0"
   }
 }

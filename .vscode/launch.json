@@ -9,10 +9,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}/testdata/test.jq"
       ],
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js",
-        "${workspaceFolder}/out/**/*.js"
-      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js", "${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     },
     {
@@ -24,10 +21,7 @@
         "--disable-extensions",
         "${workspaceFolder}/testdata/test.jq"
       ],
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js",
-        "${workspaceFolder}/out/**/*.js"
-      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js", "${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     }
   ]
