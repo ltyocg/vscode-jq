@@ -24,12 +24,15 @@
  *  - 空行原样保留、绝不凭空增加；连续两个以上的空行压缩到两个
  *  - 注释保留：独立注释独占一行，行尾注释留在行尾
  *
- * 内部模块：
- *  - api.ts      选项与错误类型（叶子模块，避免循环依赖）
- *  - spacing.ts  纯空白规则（token 间距、一元负号标注）
- *  - tokens.ts   token 流层（括号配对、对象键判定、位置算术）
- *  - emit.ts     行发射器（拼行、缩进、行宽）
- *  - layout.ts   布局决策（断行、展开、语法上下文栈）
+ * 内部模块（依赖自上而下，无环）：
+ *  - api.ts       选项与错误类型（叶子模块，避免循环依赖）
+ *  - spacing.ts   纯空白规则（token 间距、一元负号标注、括号内侧补位）
+ *  - tokens.ts    token 流层（括号配对、对象键判定、位置算术）
+ *  - breakkind.ts 断点词汇表（decide 与 predict 共用的「合法断点」分类）
+ *  - emit.ts      行发射器（拼行、缩进、行宽）
+ *  - measure.ts   行宽测量（片段试排、宽度预算）
+ *  - predict.ts   源码断行推断（组风格：展开/悬挂/前导分隔符）
+ *  - layout.ts    布局决策（decide 引擎：断行、缩进、语法上下文栈）
  */
 
 import { LexError, tokenize, type Token } from '../tokenizer'

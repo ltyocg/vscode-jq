@@ -1,10 +1,10 @@
 /**
- * 布局层：单遍扫描 token 流，决定断行、缩进与括号组展开。
- *
- * Layout 类持有全部语法上下文（括号组栈、子句栈、def 记账），
- * 行发射委托给 LineBuilder,token 间距规则来自 spacing.ts,
- * token 流的派生信息（括号配对、对象键判定、位置算术）来自
- * tokens.ts。
+ * 布局层（decide 引擎）：单遍扫描 token 流，决定断行、缩进与括号组
+ * 展开。Layout 类持有全部语法上下文（括号组栈、子句栈、def 记账），
+ * 行发射委托给 LineBuilder，token 间距规则来自 spacing.ts，token 流
+ * 派生信息来自 tokens.ts；「假如这样排会怎样」的推测（组风格、宽度
+ * 预算）委托给 measure.ts 与 predict.ts —— 两侧共用的断点词汇表与
+ * 有意不对称的契约见 breakkind.ts 头注释。
  */
 
 import type { FormatOptions } from './api'
