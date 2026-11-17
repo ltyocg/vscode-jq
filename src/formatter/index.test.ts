@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatJq, FormatError } from './formatter'
+import { formatJq, FormatError } from './index'
 
 const fmt = (src: string, printWidth = 100) => formatJq(src, { printWidth })
 
@@ -45,26 +45,26 @@ test('string interpolation kept verbatim', () => {
 })
 
 test('multi-line string literals (real lexer allows raw newlines)', () => {
-  // jqlang/jq src/lexer.l: IN_QQSTRING content rule `[^\\"]+` matches
-  // newlines — jqjq's _builtins_src relies on this. Content is verbatim.
+  // jqlang/jq src/lexer.l 的 IN_QQSTRING 内容规则 `[^\\"]+` 能匹配
+  // 换行 —— jqjq 的 _builtins_src 依赖这一点。内容原样保留。
   const src = 'def src: "\ndef f: .a;\n.def";\nsrc'
   assert.equal(fmt(src), src + '\n')
-  // interpolation body may span lines too
+  // 插值体同样可以跨行
   assert.equal(fmt('"x \\(1 +\n2) y"'), '"x \\(1 +\n2) y"\n')
 })
 
 test('def formatting', () => {
   assert.equal(fmt('def f(a;b):.a|f;'), 'def f(a; b): .a | f;\n')
   assert.equal(fmt('def f: .a | .b; .f'), 'def f: .a | .b;\n.f\n')
-  // blank line between defs is preserved (max one)
+  // def 之间的空行保留(最多一个)
   assert.equal(fmt('def f: .a;\n\n\ndef g: .b;\n.f'), 'def f: .a;\n\ndef g: .b;\n.f\n')
-  // ... also when the preceding "thing" is a comment block and this is
-  // the first code token of the file (jqjq.jq's header)
+  // ……当上文是注释块且这是文件首个代码 token 时也一样
+  // (jqjq.jq 的文件头)
   assert.equal(
     fmt('# shebang block\n# notes\n\ndef f: .a;\n.f'),
     '# shebang block\n# notes\n\ndef f: .a;\n.f\n'
   )
-  // no blank in the source: none invented
+  // 源码没有空行:不凭空造出
   assert.equal(fmt('# c\ndef f: .a;\n.f'), '# c\ndef f: .a;\n.f\n')
 })
 
@@ -98,22 +98,22 @@ test('object construction', () => {
   assert.equal(fmt('{if: 1, end: 2}'), '{if: 1, end: 2}\n')
   const src = '{\n  "a": 1,\n  "b": 2\n}'
   assert.equal(fmt(src), src + '\n')
-  // comments force expansion
+  // 注释迫使展开
   assert.equal(fmt('{a: 1, # first\nb: 2}'), '{\n  a: 1,  # first\n  b: 2\n}\n')
 })
 
 test('keyword-named object keys do not trigger clause logic', () => {
-  // keys named like clause/def keywords must stay inline and must not
-  // open/close if/try contexts or be treated as definitions
+  // 形如子句/def 关键字的对象键必须保持单行,且不得开关 if/try
+  // 上下文、不得被当作定义
   assert.equal(
     fmt('{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}'),
     '{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}\n'
   )
-  // a key must not capture or pop the clause indent of a real if
+  // 对象键不得捕获或弹掉真实 if 的子句缩进
   const src = 'if .a\nthen {if: 1, end: 2}\nelse .b\nend'
   assert.equal(fmt(src), src + '\n')
-  // the jqjq shape: keyword keys inside a paren group (was unstable
-  // across repeated formats when commas moved from leading to trailing)
+  // jqjq 的形态:括号组内的关键字键(此前逗号从前导挪到尾导时
+  // 反复格式化结果不稳定)
   const src2 = [
     'def f:',
     '  ( { cond: 1',
@@ -161,15 +161,14 @@ test('comments', () => {
 })
 
 test('comment backslash continuation (jq 1.8 spec)', () => {
-  // odd run of trailing backslashes: the next line is part of the comment
-  // and is kept verbatim, never re-indented
+  // 行尾是奇数个反斜杠:下一行属于注释,原样保留、绝不重排缩进
   assert.equal(fmt('[.[]] # c \\\n, 99 is comment'), '[.[]]  # c \\\n, 99 is comment\n')
-  // even run: the next line is code and is formatted normally
+  // 偶数个:下一行是代码,正常格式化
   assert.equal(fmt('1, # even \\\\\n2'), '1,  # even \\\\\n2\n')
-  // standalone continued comment
+  // 独立的续行注释
   assert.equal(fmt('# a \\\ncont line\n. as $x | $x'), '# a \\\ncont line\n. as $x | $x\n')
-  // a backslash followed by a space is NOT a continuation in jq; the
-  // space must survive formatting so the next line stays code
+  // jq 里反斜杠后跟空格不算续行;这个空格必须在格式化后保留,
+  // 下一行才仍然是代码
   assert.equal(fmt('2 # c \\ \n+ 3'), '2  # c \\ \n+ 3\n')
 })
 
@@ -178,13 +177,13 @@ test('leading-dot number literals', () => {
   assert.equal(fmt('[.5, .25]'), '[.5, .25]\n')
   assert.equal(fmt('{a: .5}'), '{a: .5}\n')
   assert.equal(fmt('-.5'), '-.5\n')
-  // dot access stays dot access
+  // 点访问仍然是点访问
   assert.equal(fmt('.a[0] | .[]'), '.a[0] | .[]\n')
 })
 
 test('group opened on a pipe-continuation line indents from that line', () => {
-  // A group whose opener sits on the '| ...' continuation line (indent 1)
-  // bases its contents one level deeper than that line, closers back on it.
+  // 开括号落在 '| …' 续行(缩进 1)上的组,内容比该行再深一层,
+  // 闭括号回到该行的层级。
   assert.equal(fmt('.a\n| map({\n  b: 1\n})'), '.a\n  | map(\n    {\n      b: 1\n    }\n  )\n')
   assert.equal(fmt('.a\n| {\n  b: 1\n}'), '.a\n  | {\n    b: 1\n  }\n')
 })
@@ -210,7 +209,7 @@ test('idempotency', () => {
 })
 
 test('broken input is left alone', () => {
-  const bad = '{"a": 1' // unbalanced
+  const bad = '{"a": 1' // 括号不配对
   assert.throws(() => fmt(bad), FormatError)
   assert.throws(() => fmt('.a "unterminated'), FormatError)
 })

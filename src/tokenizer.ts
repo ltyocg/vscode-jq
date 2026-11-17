@@ -1,6 +1,6 @@
 /**
- * Tokenizer for the jq language, based on the token set of the official
- * grammar (jqlang/jq src/parser.y + src/lexer.l):
+ * jq 语言的词法分析器,token 集合与官方文法一致
+ * (jqlang/jq 的 src/parser.y + src/lexer.l):
  *
  *   %token IDENT FIELD BINDING LITERAL FORMAT REC ".." SETMOD "%=" EQ "=="
  *           NEQ "!=" DEFINEDOR "//" AS "as" DEF "def" MODULE "module"
@@ -26,12 +26,10 @@ export type TokenType =
 export interface Token {
   type: TokenType
   text: string
-  /** 0-based line of the first character */
+  /** 首字符所在行(0 起) */
   line: number
-  /** 0-based column of the first character */
+  /** 首字符所在列(0 起) */
   col: number
-  /** set by the formatter: this '-' is a unary minus */
-  unary?: boolean
 }
 
 const KEYWORDS = new Set([
@@ -57,7 +55,7 @@ const KEYWORDS = new Set([
 
 const CONSTANTS = new Set(['true', 'false', 'null'])
 
-// Multi-character operators must come before their prefixes.
+// 多字符运算符必须排在它的单字符前缀之前。
 const OPERATORS = [
   '?//',
   '|=',
@@ -100,13 +98,11 @@ const isIdentChar = (c: string) => /[a-zA-Z_0-9]/.test(c)
 const isDigit = (c: string) => c >= '0' && c <= '9'
 
 /**
- * Scan a `#` comment starting at s[start] === '#'.
+ * 扫描从 s[start](s[start] === '#')开始的注释。
  *
- * Per the jq manual: a `#` starts a comment that runs to the end of the
- * line, but when the end of the line is preceded by an odd number of
- * backslash characters, the following line is part of the comment as
- * well (this is what makes the `# \` shebang trick work). Returns the
- * index of the terminating newline, or s.length at end of input.
+ * 依据 jq 手册:'#' 开启一段到行尾为止的注释;但当行尾前面有
+ * 奇数个反斜杠时,下一行也属于这段注释(shebang 的 `# \` 技巧
+ * 正依赖于此)。返回终止换行符的下标,输入结束时返回 s.length。
  */
 function scanComment(s: string, start: number): number {
   let i = start
@@ -114,7 +110,7 @@ function scanComment(s: string, start: number): number {
     let eol = i
     while (eol < s.length && s[eol] !== '\n') eol++
     if (eol >= s.length) return eol
-    // Count the run of backslashes ending this line (before an optional \r).
+    // 统计该行末尾(不含可选的 \r)的连续反斜杠个数
     let k = eol
     if (k > i && s[k - 1] === '\r') k--
     let backslashes = 0
@@ -123,20 +119,18 @@ function scanComment(s: string, start: number): number {
       k--
     }
     if (backslashes % 2 === 0) return eol
-    i = eol + 1 // odd run: the next line is comment too
+    i = eol + 1 // 奇数个:下一行也是注释
   }
 }
 
 /**
- * Scan a double-quoted jq string starting at s[start] === '"'.
- * Handles escapes and \(...) interpolation with full nesting
- * (strings inside interpolations, interpolations inside those strings, ...).
- * Returns the index of the closing quote.
+ * 扫描从 s[start](s[start] === '"')开始的双引号字符串,处理
+ * 转义与 \(…) 插值的完整嵌套(插值里的字符串、字符串里的插值……)。
+ * 返回闭引号的下标。
  *
- * Raw newlines are legal inside jq string literals (the real lexer's
- * IN_QQSTRING content rule `[^\\"]+` matches them — see jqlang/jq
- * src/lexer.l), so multi-line strings like jqjq's `_builtins_src` scan
- * as a single token.
+ * jq 字符串字面量里允许裸换行(真实词法器 IN_QQSTRING 的内容规则
+ * `[^\\"]+` 能匹配换行,见 jqlang/jq src/lexer.l),所以 jqjq 的
+ * `_builtins_src` 那类多行字符串会扫描成单个 token。
  */
 function scanString(s: string, start: number): number {
   let i = start + 1
@@ -159,8 +153,7 @@ function scanString(s: string, start: number): number {
 }
 
 /**
- * Scan an interpolation body; `i` points just past "\(".
- * Returns the index just past the matching ")".
+ * 扫描插值体;i 指向 "\(" 之后。返回越过配对 ')' 的下标。
  */
 function scanInterpolation(s: string, i: number): number {
   let depth = 1
@@ -185,9 +178,8 @@ function scanInterpolation(s: string, i: number): number {
 }
 
 /**
- * Scan a number literal starting at s[i] (a digit, or '.' followed by a
- * digit — jq accepts leading-dot floats like `.5`). Returns the index
- * just past the literal.
+ * 扫描从 s[i] 开始的数字字面量(s[i] 是数字,或后跟数字的 '.'
+ * —— jq 接受 '.5' 这种前导点小数)。返回越过字面量的下标。
  */
 function scanNumber(s: string, i: number): number {
   if (s[i] === '.') {
@@ -237,8 +229,8 @@ export function tokenize(src: string): Token[] {
       const begin = i
       i = scanComment(src, i)
       push('comment', src.slice(begin, i))
-      // The token may span lines (backslash continuation); catch up the
-      // line counter so later tokens report correct positions.
+      // 该 token 可能跨行(反斜杠续行);同步行号,让后续 token
+      // 报告正确的位置
       const text = src.slice(begin, i)
       const lastNl = text.lastIndexOf('\n')
       if (lastNl >= 0) {
@@ -267,7 +259,7 @@ export function tokenize(src: string): Token[] {
         while (i < src.length && isIdentChar(src[i])) i++
         push('variable', src.slice(begin, i))
       } else {
-        // lone '$' (e.g. the private $$$$name hack in jq's builtin.jq)
+        // 裸 '$'(jq builtin.jq 里私有的 $$$$name 技巧)
         push('operator', '$')
       }
       continue
@@ -296,38 +288,4 @@ export function tokenize(src: string): Token[] {
     throw new LexError(`unexpected character ${JSON.stringify(c)} at line ${line + 1}`)
   }
   return tokens
-}
-
-/** Opening brackets paired with their closing counterparts. */
-const BRACKET_PAIR: Record<string, string> = { '(': ')', '[': ']', '{': '}' }
-
-export function isOpenBracket(t: Token): boolean {
-  return t.type === 'operator' && t.text in BRACKET_PAIR
-}
-
-export function isCloseBracket(t: Token): boolean {
-  return t.type === 'operator' && [')', ']', '}'].includes(t.text)
-}
-
-/**
- * Map each opening bracket token index to its matching closing bracket
- * token index. Throws on unbalanced brackets.
- */
-export function matchBrackets(tokens: Token[]): Map<number, number> {
-  const match = new Map<number, number>()
-  const stack: number[] = []
-  tokens.forEach((t, i) => {
-    if (isOpenBracket(t)) {
-      stack.push(i)
-    } else if (isCloseBracket(t)) {
-      const open = stack.pop()
-      if (open === undefined) throw new LexError(`unbalanced '${t.text}'`)
-      if (BRACKET_PAIR[tokens[open].text] !== t.text) {
-        throw new LexError(`mismatched bracket '${tokens[open].text}'...'${t.text}'`)
-      }
-      match.set(open, i)
-    }
-  })
-  if (stack.length > 0) throw new LexError(`unbalanced '${tokens[stack[stack.length - 1]].text}'`)
-  return match
 }

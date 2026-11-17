@@ -6,6 +6,12 @@
       "type": "shell",
       "command": "pnpm",
       "args": ["run", "compile"],
+      "options": {
+        "shell": {
+          "executable": "/bin/zsh",
+          "args": ["-lic"]
+        }
+      },
       "group": {
         "kind": "build",
         "isDefault": true

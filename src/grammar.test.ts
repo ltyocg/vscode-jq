@@ -27,10 +27,7 @@ before(async () => {
     loadGrammar: async (scopeName) =>
       scopeName === 'source.jq'
         ? parseRawGrammar(
-            fs.readFileSync(
-              path.join(__dirname, '..', 'syntaxes', 'jq.tmLanguage.json'),
-              'utf-8'
-            ),
+            fs.readFileSync(path.join(__dirname, '..', 'syntaxes', 'jq.tmLanguage.json'), 'utf-8'),
             'jq.tmLanguage.json'
           )
         : null
