@@ -44,6 +44,15 @@ test('string interpolation kept verbatim', () => {
   assert.equal(fmt(src), src + '\n');
 });
 
+test('multi-line string literals (real lexer allows raw newlines)', () => {
+  // jqlang/jq src/lexer.l: IN_QQSTRING content rule `[^\\"]+` matches
+  // newlines — jqjq's _builtins_src relies on this. Content is verbatim.
+  const src = 'def src: "\ndef f: .a;\n.def";\nsrc';
+  assert.equal(fmt(src), src + '\n');
+  // interpolation body may span lines too
+  assert.equal(fmt('"x \\(1 +\n2) y"'), '"x \\(1 +\n2) y"\n');
+});
+
 test('def formatting', () => {
   assert.equal(fmt('def f(a;b):.a|f;'), 'def f(a; b): .a | f;\n');
   assert.equal(
@@ -213,6 +222,7 @@ test('idempotency', () => {
     '# a \\\ncont\n. as $x | $x',
     '[.[]] # c \\\n, 99 is comment',
     '.5 + .5e2 + 1.5',
+    'def src: "\na\nb";\nsrc | .x',
   ];
   for (const s of samples) {
     const once = fmt(s);

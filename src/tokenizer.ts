@@ -86,6 +86,11 @@ function scanComment(s: string, start: number): number {
  * Handles escapes and \(...) interpolation with full nesting
  * (strings inside interpolations, interpolations inside those strings, ...).
  * Returns the index of the closing quote.
+ *
+ * Raw newlines are legal inside jq string literals (the real lexer's
+ * IN_QQSTRING content rule `[^\\"]+` matches them — see jqlang/jq
+ * src/lexer.l), so multi-line strings like jqjq's `_builtins_src` scan
+ * as a single token.
  */
 function scanString(s: string, start: number): number {
   let i = start + 1;
@@ -102,7 +107,6 @@ function scanString(s: string, start: number): number {
       continue;
     }
     if (c === '"') return i;
-    if (c === '\n') throw new LexError('raw newline inside string literal');
     i++;
   }
   throw new LexError('unterminated string literal');

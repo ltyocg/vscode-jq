@@ -26,8 +26,14 @@ export function activate(context: vscode.ExtensionContext): void {
         formatted = formatJq(text, formatOptions());
       } catch (e) {
         if (e instanceof FormatError) {
-          // Don't touch files we cannot parse — just report why.
+          // Don't touch files we cannot parse — but say so visibly.
+          // A silent [] looks like "nothing to format" and hides the cause.
           LOG.error(e.message);
+          void vscode.window
+            .showWarningMessage(`jq format: ${e.message}`, 'Show Log')
+            .then((pick) => {
+              if (pick === 'Show Log') LOG.show();
+            });
           return [];
         }
         throw e;
