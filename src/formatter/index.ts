@@ -27,15 +27,16 @@
  * 内部模块：
  *  - api.ts      选项与错误类型（叶子模块，避免循环依赖）
  *  - spacing.ts  纯空白规则（token 间距、一元负号标注）
+ *  - tokens.ts   token 流层（括号配对、对象键判定、位置算术）
  *  - emit.ts     行发射器（拼行、缩进、行宽）
- *  - layout.ts   布局决策（断行、展开、语法上下文栈、括号配对）
+ *  - layout.ts   布局决策（断行、展开、语法上下文栈）
  */
 
 import { LexError, tokenize, type Token } from '../tokenizer'
 import { FormatError, defaultFormatOptions, type FormatOptions } from './api'
 import { LineBuilder } from './emit'
-import { Layout, matchBrackets } from './layout'
-import { annotateUnary } from './spacing'
+import { Layout } from './layout'
+import { buildStream } from './tokens'
 
 export { FormatError, defaultFormatOptions } from './api'
 export type { FormatOptions } from './api'
@@ -53,14 +54,14 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
   }
   if (raw.length === 0) return src
 
-  // 预处理：标注一元负号、配对括号。词法错误与结构错误统一以
-  // FormatError 抛出，调用方(extension.ts)据此拒绝改动文件。
-  const tokens = annotateUnary(raw)
-  const match = matchBrackets(tokens)
+  // 预处理：一元负号标注、括号配对、对象键判定，一次性完成。
+  // 词法错误与结构错误统一以 FormatError 抛出，调用方(extension.ts)
+  // 据此拒绝改动文件。
+  const st = buildStream(raw)
 
   const eol = src.includes('\r\n') ? '\r\n' : '\n'
   const out = new LineBuilder()
-  new Layout(tokens, match, opts, out).run()
+  new Layout(st, opts, out).run()
   out.trimTrailingBlankLines()
   return out.join(eol) + eol
 }

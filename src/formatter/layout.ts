@@ -2,30 +2,21 @@
  * 布局层：单遍扫描 token 流，决定断行、缩进与括号组展开。
  *
  * Layout 类持有全部语法上下文（括号组栈、子句栈、def 记账），
- * 行发射委托给 LineBuilder,token 间距规则来自 spacing.ts。
- * 本文件还提供 matchBrackets —— 括号配对是结构分析而非词法，
- * 属于格式化器的职责。
+ * 行发射委托给 LineBuilder,token 间距规则来自 spacing.ts,
+ * token 流的派生信息（括号配对、对象键判定、位置算术）来自
+ * tokens.ts。
  */
 
-import { FormatError, type FormatOptions } from './api'
+import type { FormatOptions } from './api'
 import { LineBuilder, trimLineEnd } from './emit'
+import { CLAUSE_KEYWORDS, CLOSERS, LINE_BREAK_BINOPS, OPENERS, gapBetween, type FmtToken } from './spacing'
 import {
-  CLAUSE_KEYWORDS,
-  CLOSERS,
-  LINE_BREAK_BINOPS,
-  OPENERS,
-  gapBetween,
-  isObjectKey,
-  type FmtToken
-} from './spacing'
-
-/**
- * 断点搜索的向前看上限（token 数）。从某个 token 起最多看这么多
- * token 仍找不到合法断点，就把直到文件尾的余下部分视为一个片段：
- * 它会被当作不可分割的单行输出（括号组内部仍照常展开），以此
- * 避免对病态长输入做平方级扫描。
- */
-const MAX_SEGMENT_LOOKAHEAD = 200
+  MAX_SEGMENT_LOOKAHEAD,
+  TokenStream,
+  endCol,
+  endLine,
+  newlinesBetween
+} from './tokens'
 
 /**
  * 保留的连续空行上限：源码空行原样保留、绝不凭空增加，
@@ -94,47 +85,6 @@ interface BreakDecision {
   indent: number | null
 }
 
-function countNewlines(s: string): number {
-  let n = 0
-  for (let i = s.indexOf('\n'); i >= 0; i = s.indexOf('\n', i + 1)) n++
-  return n
-}
-
-/** token 在其结束行上的尾后列号（0 起，不含）；多行 token 取最后一行 */
-function endCol(t: FmtToken): number {
-  const lastNl = t.text.lastIndexOf('\n')
-  return lastNl >= 0 ? t.text.length - lastNl - 1 : t.col + t.text.length
-}
-
-const BRACKET_PAIR: Record<string, string> = { '(': ')', '[': ']', '{': '}' }
-
-/**
- * 为每个开括号 token 求出配对的闭括号 token 下标；
- * 括号不配对或类型不匹配时抛 FormatError。
- */
-export function matchBrackets(tokens: FmtToken[]): Map<number, number> {
-  const match = new Map<number, number>()
-  const stack: number[] = []
-  tokens.forEach((t, i) => {
-    if (t.type === 'operator' && t.text in BRACKET_PAIR) {
-      stack.push(i)
-    } else if (t.type === 'operator' && (t.text === ')' || t.text === ']' || t.text === '}')) {
-      const open = stack.pop()
-      if (open === undefined) throw new FormatError(`cannot format: unbalanced '${t.text}'`)
-      if (BRACKET_PAIR[tokens[open].text] !== t.text) {
-        throw new FormatError(
-          `cannot format: mismatched bracket '${tokens[open].text}'...'${t.text}'`
-        )
-      }
-      match.set(open, i)
-    }
-  })
-  if (stack.length > 0) {
-    throw new FormatError(`cannot format: unbalanced '${tokens[stack[stack.length - 1]].text}'`)
-  }
-  return match
-}
-
 export class Layout {
   // -- 语法上下文 --
   private readonly groups: GroupCtx[] = []
@@ -157,11 +107,17 @@ export class Layout {
   private lastAnyEndLine = -1
 
   constructor(
-    private readonly tokens: FmtToken[],
-    private readonly match: Map<number, number>,
+    private readonly st: TokenStream,
     private readonly opts: FormatOptions,
     private readonly out: LineBuilder
-  ) {}
+  ) {
+    // 便捷别名：token 与括号配对是最高频的访问
+    this.tokens = st.tokens
+    this.match = st.match
+  }
+
+  private readonly tokens: readonly FmtToken[]
+  private readonly match: ReadonlyMap<number, number>
 
   run(): void {
     for (let i = 0; i < this.tokens.length; i++) {
@@ -202,7 +158,7 @@ export class Layout {
       // -- 记账：语法上下文与游标 --
       this.updateContexts(t, i)
       this.prevReal = t
-      this.lastAnyEndLine = t.line + countNewlines(t.text)
+      this.lastAnyEndLine = endLine(t)
     }
     if (this.out.hasContent) this.out.finishLine()
   }
@@ -265,7 +221,7 @@ export class Layout {
       this.out.addStandaloneLine(indent, text)
     }
     // 续行注释（行尾奇数个反斜杠）本身横跨多行
-    this.lastAnyEndLine = t.line + countNewlines(t.text)
+    this.lastAnyEndLine = endLine(t)
   }
 
   /**
@@ -279,7 +235,7 @@ export class Layout {
     const innerGroup = this.groups[this.groups.length - 1]
     const inlineInnermost = this.groups.length > 0 && !innerGroup.expanded
     // `{if: 1}` —— 关键字作为对象键，不是子句/def 关键字
-    const objectKey = isObjectKey(this.tokens, i)
+    const objectKey = this.st.objectKey[i]
 
     let indent: number | null = null
 
@@ -397,7 +353,7 @@ export class Layout {
    */
   private updateContexts(t: FmtToken, i: number): void {
     // `{if: 1}` —— 关键字作为对象键，不触发任何语法记账
-    const objectKey = isObjectKey(this.tokens, i)
+    const objectKey = this.st.objectKey[i]
 
     if (t.type === 'operator') {
       if (OPENERS.has(t.text)) {
@@ -541,7 +497,7 @@ export class Layout {
           if (
             tk.type === 'keyword' &&
             (CLAUSE_KEYWORDS.has(tk.text) || tk.text === 'def') &&
-            !isObjectKey(this.tokens, k)
+            !this.st.objectKey[k]
           ) {
             return k
           }
@@ -592,7 +548,7 @@ export class Layout {
     if (t.text !== 'then' && t.text !== 'elif' && t.text !== 'else') return false
     const next = this.tokens[i + 1]
     if (next === undefined || next.type === 'comment') return false
-    if (next.line > t.line + countNewlines(t.text)) return false
+    if (next.line > endLine(t)) return false
     const seg = this.segmentWidth(i + 1)
     return seg === Infinity || this.out.col() + t.text.length + 1 + seg > this.opts.printWidth
   }
@@ -609,14 +565,14 @@ export class Layout {
     const close = this.match.get(i)!
     const leadSep = this.hasLeadingSeparator(i, close)
     if (close === i + 1) return { expanded: false, hanging: false, leadSep } // 空组
-    let prevEnd = this.tokens[i].line
+    let prevEnd = endLine(this.tokens[i])
     let sourceBreak = false
     let hasComment = false
     for (let k = i + 1; k < close; k++) {
       const tk = this.tokens[k]
       if (tk.line > prevEnd) sourceBreak = true
       if (tk.type === 'comment') hasComment = true
-      prevEnd = tk.line + countNewlines(tk.text)
+      prevEnd = endLine(tk)
     }
     if (this.tokens[close].line > prevEnd) sourceBreak = true
     if (!sourceBreak && !hasComment) {
@@ -663,7 +619,7 @@ export class Layout {
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
       else if (depth === 0 && (tk.text === ',' || tk.text === ';')) {
         const prev = this.tokens[k - 1]
-        if (tk.line > prev.line + countNewlines(prev.text)) return true
+        if (newlinesBetween(prev, tk) > 0) return true
       }
     }
     return false
@@ -693,12 +649,12 @@ export class Layout {
       if (
         tk.type === 'keyword' &&
         tk.text === 'def' &&
-        !isObjectKey(this.tokens, k) &&
+        !this.st.objectKey[k] &&
         k > i + 1
       ) {
         return true
       }
-      const nl = tk.line - (prev.line + countNewlines(prev.text))
+      const nl = newlinesBetween(prev, tk)
       if (nl <= 0) {
         continue
       }
@@ -708,7 +664,7 @@ export class Layout {
       if (tk.type === 'operator' && this.isBinop(tk)) return true
       // 前导分隔符：悬挂组里会以行首 ','/';' 断行（见 decideBreak）
       if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) return true
-      if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !isObjectKey(this.tokens, k)) {
+      if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]) {
         return true
       }
       // 子句关键字之后的换行：分支内容另起一行（见 decideBreak）
@@ -716,7 +672,7 @@ export class Layout {
       if (prev.type === 'operator' && (prev.text === ',' || prev.text === ';')) return true
     }
     const last = this.tokens[close - 1]
-    return this.tokens[close].line > last.line + countNewlines(last.text)
+    return this.tokens[close].line > endLine(last)
   }
 
   /**
@@ -742,7 +698,7 @@ export class Layout {
         depth === 0 &&
         ((tk.type === 'operator' &&
           (tk.text === ',' || tk.text === ';' || tk.text === '|' || this.isBinop(tk))) ||
-          (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !isObjectKey(this.tokens, k)))
+          (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]))
       ) {
         return k
       }
@@ -782,11 +738,11 @@ export class Layout {
           return false
         }
         const prev = this.tokens[k - 1]
-        const nl = tk.line - (prev.line + countNewlines(prev.text))
+        const nl = newlinesBetween(prev, tk)
         if (nl <= 0) continue
         // 源码此处有换行：落在合法断点上才会真的断行
         if (tk.type === 'operator' && (tk.text === '|' || this.isBinop(tk))) return true
-        if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !isObjectKey(this.tokens, k)) {
+        if (tk.type === 'keyword' && CLAUSE_KEYWORDS.has(tk.text) && !this.st.objectKey[k]) {
           return true
         }
         // 对象键的冒号之后换行：值另起一行（decideBreak 的对象冒号规则）
