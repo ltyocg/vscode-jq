@@ -24,7 +24,7 @@ test('field access and indexing stay tight', () => {
 })
 
 test('unary minus', () => {
-  assert.equal(fmt('{a: -1}'), '{a: -1}\n')
+  assert.equal(fmt('{a: -1}'), '{ a: -1 }\n')
   assert.equal(fmt('[-1, -2]'), '[-1, -2]\n')
   assert.equal(fmt('f(-1)'), 'f(-1)\n')
   assert.equal(fmt('1 - 2'), '1 - 2\n')
@@ -56,16 +56,40 @@ test('multi-line string literals (real lexer allows raw newlines)', () => {
 test('def formatting', () => {
   assert.equal(fmt('def f(a;b):.a|f;'), 'def f(a; b): .a | f;\n')
   assert.equal(fmt('def f: .a | .b; .f'), 'def f: .a | .b;\n.f\n')
-  // def 之间的空行保留(最多一个)
-  assert.equal(fmt('def f: .a;\n\n\ndef g: .b;\n.f'), 'def f: .a;\n\ndef g: .b;\n.f\n')
+  // def 之间的空行原样保留（最多两个）
+  assert.equal(fmt('def f: .a;\n\ndef g: .b;\n.f'), 'def f: .a;\n\ndef g: .b;\n.f\n')
+  assert.equal(fmt('def f: .a;\n\n\ndef g: .b;\n.f'), 'def f: .a;\n\n\ndef g: .b;\n.f\n')
   // ……当上文是注释块且这是文件首个代码 token 时也一样
-  // (jqjq.jq 的文件头)
+  // （jqjq.jq 的文件头）
   assert.equal(
     fmt('# shebang block\n# notes\n\ndef f: .a;\n.f'),
     '# shebang block\n# notes\n\ndef f: .a;\n.f\n'
   )
-  // 源码没有空行:不凭空造出
+  // 源码没有空行：不凭空造出
   assert.equal(fmt('# c\ndef f: .a;\n.f'), '# c\ndef f: .a;\n.f\n')
+  // 注释自身占的行不计成空行
+  assert.equal(fmt('def f: .a;\n# c\ndef g: .b;'), 'def f: .a;\n# c\ndef g: .b;\n')
+})
+
+test('blank lines: preserved verbatim, never added, capped at two', () => {
+  // 管道之间
+  assert.equal(fmt('.a\n\n| .b'), '.a\n\n  | .b\n')
+  // 连续两个以上空行压缩到两个
+  assert.equal(fmt('.a\n\n\n\n| .b'), '.a\n\n\n  | .b\n')
+  // 子句之间
+  assert.equal(fmt('if .a\n\nthen .b else .c end'), 'if .a\n\nthen .b else .c end\n')
+  // 展开组元素之间
+  const arr = '[\n  1,\n\n  2\n]'
+  assert.equal(fmt(arr), arr + '\n')
+  // 独立注释前后
+  const commented = '.a\n\n# note\n\n.b | .c'
+  assert.equal(fmt(commented), commented + '\n')
+  // 注释之间的空行
+  assert.equal(fmt('# a\n\n# b\n.c'), '# a\n\n# b\n.c\n')
+  // 行尾注释之后的空行
+  assert.equal(fmt('.a # c\n\n| .b'), '.a # c\n\n  | .b\n')
+  // 源码没有空行：行宽断行也不凭空增加
+  assert.equal(fmt('.aaaaaaaa | .bbbbbbbb', 10), '.aaaaaaaa\n  | .bbbbbbbb\n')
 })
 
 test('if/elif/else/end clauses', () => {
@@ -90,29 +114,29 @@ test('reduce / foreach / label / break', () => {
     fmt('label $out | .[] | if . then . else break $out end'),
     'label $out | .[] | if . then . else break $out end\n'
   )
-  assert.equal(fmt('. as [$a] ?// {$b} | $a'), '. as [$a] ?// {$b} | $a\n')
+  assert.equal(fmt('. as [$a] ?// {$b} | $a'), '. as [$a] ?// { $b } | $a\n')
 })
 
 test('object construction', () => {
-  assert.equal(fmt('{a: 1, "b": 2, $c}'), '{a: 1, "b": 2, $c}\n')
-  assert.equal(fmt('{if: 1, end: 2}'), '{if: 1, end: 2}\n')
+  assert.equal(fmt('{a: 1, "b": 2, $c}'), '{ a: 1, "b": 2, $c }\n')
+  assert.equal(fmt('{if: 1, end: 2}'), '{ if: 1, end: 2 }\n')
   const src = '{\n  "a": 1,\n  "b": 2\n}'
   assert.equal(fmt(src), src + '\n')
-  // 注释迫使展开
-  assert.equal(fmt('{a: 1, # first\nb: 2}'), '{\n  a: 1,  # first\n  b: 2\n}\n')
+  // 注释迫使展开；开括号后接了内容 → 悬挂式，保留源码换行
+  assert.equal(fmt('{a: 1, # first\nb: 2}'), '{ a: 1, # first\n  b: 2 }\n')
 })
 
 test('keyword-named object keys do not trigger clause logic', () => {
-  // 形如子句/def 关键字的对象键必须保持单行,且不得开关 if/try
+  // 形如子句/def 关键字的对象键必须保持单行，且不得开关 if/try
   // 上下文、不得被当作定义
   assert.equal(
     fmt('{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}'),
-    '{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}\n'
+    '{ if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7 }\n'
   )
   // 对象键不得捕获或弹掉真实 if 的子句缩进
-  const src = 'if .a\nthen {if: 1, end: 2}\nelse .b\nend'
+  const src = 'if .a\nthen { if: 1, end: 2 }\nelse .b\nend'
   assert.equal(fmt(src), src + '\n')
-  // jqjq 的形态:括号组内的关键字键(此前逗号从前导挪到尾导时
+  // jqjq 的形态：括号组内的关键字键(此前逗号从前导挪到尾导时
   // 反复格式化结果不稳定)
   const src2 = [
     'def f:',
@@ -131,7 +155,7 @@ test('keyword-named object keys do not trigger clause logic', () => {
 test('import / include / module', () => {
   assert.equal(
     fmt('module {name: "x"}; import "a" as b; include "c"; .'),
-    'module {name: "x"};\nimport "a" as b;\ninclude "c";\n.\n'
+    'module { name: "x" };\nimport "a" as b;\ninclude "c";\n.\n'
   )
 })
 
@@ -142,6 +166,23 @@ test('pipeline breaks with leading pipe when too long', () => {
 
 test('source line breaks in pipelines are preserved', () => {
   assert.equal(fmt('.a\n| .b'), '.a\n  | .b\n')
+})
+
+test('binary operators break with leading operator', () => {
+  // 超宽：在运算符前折行，运算符放行首、与本行同层
+  const wide = '"aaaaaaaaaaaaaaaaaaaaaaaaaa" + "bbbbbbbbbbbbbbbbbbbbbbbbbb" + "ccccccccccccccccccc"'
+  assert.equal(
+    fmt(wide, 40),
+    '"aaaaaaaaaaaaaaaaaaaaaaaaaa"\n+ "bbbbbbbbbbbbbbbbbbbbbbbbbb"\n+ "ccccccccccccccccccc"\n'
+  )
+  // 源码有换行：原样保留，行首运算符与开括号同列；悬挂组内侧补空格
+  const src = '("aaa"\n+ "bbb"\n+ "ccc"\n);'
+  assert.equal(fmt(src), '( "aaa"\n+ "bbb"\n+ "ccc"\n);\n')
+  // 一元负号不是断点
+  assert.equal(fmt('[-1, -2]'), '[-1, -2]\n')
+  assert.equal(fmt('.[1:-1]'), '.[1:-1]\n')
+  // 行内放得下：不断行
+  assert.equal(fmt('.a + .b | .c'), '.a + .b | .c\n')
 })
 
 test('groups expand when they do not fit', () => {
@@ -155,36 +196,88 @@ test('expanded paren groups (reduce)', () => {
   assert.equal(fmt(src), src + '\n')
 })
 
+test('hanging groups: opener followed by content keeps source breaks', () => {
+  // 开括号后接了内容：不强制断行，源码换行原样保留，内侧补一个空格
+  assert.equal(fmt('reduce .[] as $x (0;\n  . + $x)'), 'reduce .[] as $x ( 0;\n  . + $x )\n')
+  assert.equal(fmt('[1,\n  2,\n  3]'), '[ 1,\n  2,\n  3 ]\n')
+  assert.equal(fmt('{a: 1,\n  b: 2}'), '{ a: 1,\n  b: 2 }\n')
+  // 闭括号在源码里换行：回到开括号所在行的层级
+  assert.equal(fmt('[1,\n  2\n]'), '[ 1,\n  2\n]\n')
+  // 组内换行只发生在源码换过的地方
+  assert.equal(fmt('[1, 2,\n  3]'), '[ 1, 2,\n  3 ]\n')
+  // 开括号后没接内容：分隔式，每元素一行（内侧不补空格）
+  assert.equal(fmt('[\n  1,\n  2\n]'), '[\n  1,\n  2\n]\n')
+  // 悬挂组内续行会超宽：在分隔符处补断
+  const wide = '[0, 1, ' + '2'.repeat(98) + ',\n  3]'
+  assert.equal(fmt(wide), '[ 0, 1,\n  ' + '2'.repeat(98) + ',\n  3 ]\n')
+  // 首个元素放不进开括号行：退回分隔式
+  const huge = '[ ' + 'x'.repeat(100) + ',\n  2]'
+  assert.equal(fmt(huge), '[\n  ' + 'x'.repeat(100) + ',\n  2\n]\n')
+  // 悬挂组内的独立注释
+  assert.equal(fmt('[1,\n# note\n2]'), '[ 1,\n  # note\n  2 ]\n')
+})
+
+test('single-line object literals pad one space inside braces', () => {
+  // 只有大括号：内侧恰好一个空格
+  assert.equal(fmt('{a: 1}'), '{ a: 1 }\n')
+  assert.equal(fmt('{  a: 1  }'), '{ a: 1 }\n') // 不能多
+  assert.equal(fmt('{a:1}'), '{ a: 1 }\n') // 不能少
+  // 嵌套大括号各自补
+  assert.equal(fmt('{a: {b: 1}}'), '{ a: { b: 1 } }\n')
+  // 其余括号一律不补
+  assert.equal(fmt('[1, 2, 3]'), '[1, 2, 3]\n')
+  assert.equal(fmt('map( .a )'), 'map(.a)\n')
+  assert.equal(fmt('f(  1  )'), 'f(1)\n')
+  assert.equal(fmt('reduce .[] as $x (0; . + $x)'), 'reduce .[] as $x (0; . + $x)\n')
+  assert.equal(fmt('.a[0] | .["k"]'), '.a[0] | .["k"]\n')
+  // 空组不补
+  assert.equal(fmt('{}'), '{}\n')
+  assert.equal(fmt('map([])'), 'map([])\n')
+  // 悬挂式展开组（开括号后接内容）：各种括号都补
+  assert.equal(fmt('{a: 1,\n  b: 2}'), '{ a: 1,\n  b: 2 }\n')
+  assert.equal(fmt('[1,\n  2]'), '[ 1,\n  2 ]\n')
+  assert.equal(fmt('reduce .[] as $x (0;\n  . + $x)'), 'reduce .[] as $x ( 0;\n  . + $x )\n')
+  // 分隔式展开组（开括号独占行）不补
+  assert.equal(fmt('[\n  1\n]'), '[\n  1\n]\n')
+  // 组内 def 不再强制断行，保持单行
+  assert.equal(fmt('(def f: .a; f)'), '(def f: .a; f)\n')
+})
+
 test('comments', () => {
-  assert.equal(fmt('# header\n.a # trailing\n'), '# header\n.a  # trailing\n')
-  assert.equal(fmt('.a | # note\n.b'), '.a |  # note\n  .b\n')
+  assert.equal(fmt('# header\n.a # trailing\n'), '# header\n.a # trailing\n')
+  assert.equal(fmt('.a | # note\n.b'), '.a | # note\n  .b\n')
+  // 行尾注释间距：不足一个空格补一个，其余按源码原样保留
+  assert.equal(fmt('.a# tight'), '.a # tight\n')
+  assert.equal(fmt('.a    # wide'), '.a    # wide\n')
+  // 代码被重新排版后，注释间距仍以源码为准
+  assert.equal(fmt('1  +  2   # c'), '1 + 2   # c\n')
 })
 
 test('comment backslash continuation (jq 1.8 spec)', () => {
-  // 行尾是奇数个反斜杠:下一行属于注释,原样保留、绝不重排缩进
-  assert.equal(fmt('[.[]] # c \\\n, 99 is comment'), '[.[]]  # c \\\n, 99 is comment\n')
-  // 偶数个:下一行是代码,正常格式化
-  assert.equal(fmt('1, # even \\\\\n2'), '1,  # even \\\\\n2\n')
+  // 行尾是奇数个反斜杠：下一行属于注释，原样保留、绝不重排缩进
+  assert.equal(fmt('[.[]] # c \\\n, 99 is comment'), '[.[]] # c \\\n, 99 is comment\n')
+  // 偶数个：下一行是代码，正常格式化
+  assert.equal(fmt('1, # even \\\\\n2'), '1, # even \\\\\n2\n')
   // 独立的续行注释
   assert.equal(fmt('# a \\\ncont line\n. as $x | $x'), '# a \\\ncont line\n. as $x | $x\n')
-  // jq 里反斜杠后跟空格不算续行;这个空格必须在格式化后保留,
+  // jq 里反斜杠后跟空格不算续行；这个空格必须在格式化后保留，
   // 下一行才仍然是代码
-  assert.equal(fmt('2 # c \\ \n+ 3'), '2  # c \\ \n+ 3\n')
+  assert.equal(fmt('2 # c \\ \n+ 3'), '2 # c \\ \n+ 3\n')
 })
 
 test('leading-dot number literals', () => {
   assert.equal(fmt('.5+.5e2'), '.5 + .5e2\n')
   assert.equal(fmt('[.5, .25]'), '[.5, .25]\n')
-  assert.equal(fmt('{a: .5}'), '{a: .5}\n')
+  assert.equal(fmt('{a: .5}'), '{ a: .5 }\n')
   assert.equal(fmt('-.5'), '-.5\n')
   // 点访问仍然是点访问
   assert.equal(fmt('.a[0] | .[]'), '.a[0] | .[]\n')
 })
 
 test('group opened on a pipe-continuation line indents from that line', () => {
-  // 开括号落在 '| …' 续行(缩进 1)上的组,内容比该行再深一层,
-  // 闭括号回到该行的层级。
-  assert.equal(fmt('.a\n| map({\n  b: 1\n})'), '.a\n  | map(\n    {\n      b: 1\n    }\n  )\n')
+  // 开括号落在 '| …' 续行（缩进 1）上的组，内容比该行再深一层，
+  // 闭括号回到该行的层级。map( 后接了内容 → 悬挂式，内侧补空格。
+  assert.equal(fmt('.a\n| map({\n  b: 1\n})'), '.a\n  | map( {\n    b: 1\n  } )\n')
   assert.equal(fmt('.a\n| {\n  b: 1\n}'), '.a\n  | {\n    b: 1\n  }\n')
 })
 
@@ -200,7 +293,13 @@ test('idempotency', () => {
     '# a \\\ncont\n. as $x | $x',
     '[.[]] # c \\\n, 99 is comment',
     '.5 + .5e2 + 1.5',
-    'def src: "\na\nb";\nsrc | .x'
+    'def src: "\na\nb";\nsrc | .x',
+    'def f: .a;\n\n\n\ndef g: .b;\n.f',
+    '.a\n\n# note\n\n| .b',
+    '[\n  1,\n\n  2\n]',
+    'reduce .[] as $x (0;\n  . + $x)',
+    '[1, 2,\n  3]',
+    '[1,\n  2\n]'
   ]
   for (const s of samples) {
     const once = fmt(s)
