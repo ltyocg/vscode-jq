@@ -329,10 +329,13 @@ test('then stays on the elif line when the source breaks after it', () => {
   // 子句关键字后（跳过注释）源码换行：then 留在本行，不因分支内容
   // 平铺超宽而被挤到单独一行
   const src = 'if .a then "aaa"\nelif .b then\n# note\n( "bbb"\n+ "ccc"\n)\nelse .\nend'
-  assert.equal(fmt(src), 'if .a then "aaa"\nelif .b then\n# note\n( "bbb"\n+ "ccc"\n)\nelse .\nend\n')
-  // 源码在 then 之后换行：分支内容另起一行，与子句关键字同层，
+  assert.equal(
+    fmt(src),
+    'if .a then "aaa"\nelif .b then\n  # note\n  ( "bbb"\n  + "ccc"\n  )\nelse .\nend\n'
+  )
+  // 源码在 then 之后换行：分支内容另起一行，比子句关键字深一层，
   // 分支内的注释对齐到分支内容
-  assert.equal(fmt('if .a then\n  # note\n  .b\nelse\n  .c\nend'), 'if .a then\n# note\n.b\nelse\n.c\nend\n')
+  assert.equal(fmt('if .a then\n  # note\n  .b\nelse\n  .c\nend'), 'if .a then\n  # note\n  .b\nelse\n  .c\nend\n')
   // then 之后源码未换行：内容留在本行
   assert.equal(fmt('if .a then .b\nelse .c\nend'), 'if .a then .b\nelse .c\nend\n')
 })

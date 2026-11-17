@@ -51,6 +51,12 @@ interface GroupCtx {
    * 回到开括号所在行的行首（与行首双目运算符的层级一致）。
    */
   leadSep: boolean
+  /**
+   * 组内是否已出现顶层 ','/';'（发射顺序记账）。悬挂组里开括号行上
+   * 挂下来的运算符链与开括号竖向对齐；一旦出现顶层分隔符，后续的
+   * 管道就是元素内部结构，回到「比上下文深一层」的常规缩进。
+   */
+  seenSep: boolean
 }
 
 /** if/try 子句的布局上下文 */
@@ -190,6 +196,15 @@ export class Layout {
     return g ? g.kind : ''
   }
 
+  /**
+   * 悬挂组内、尚未出现顶层分隔符时，挂在开括号行上的运算符链与
+   * 开括号所在行的行首竖向对齐（开括号在行首时即与开括号同列）；
+   * 其余情况返回 null，走各断点自己的常规缩进。
+   */
+  #hangingChainAlign(g: GroupCtx | undefined): number | null {
+    return g?.hanging && !g.seenSep ? g.closeIndent : null
+  }
+
   #emitComment(t: FmtToken): void {
     const text = trimLineEnd(t.text)
     if (t.line === this.#lastAnyEndLine && this.#lastAnyEndLine >= 0) {
@@ -232,12 +247,15 @@ export class Layout {
     switch (breakBefore(this.#st, i)) {
       case 'pipe': {
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
-        // 断行（比上下文深一层）。尾随风格（'|' 之后源码已换行）不
-        // 抢断：下一片段反正会另起一行，交给 afterBinop 按源码保留
+        // 断行。尾随风格（'|' 之后源码已换行）不抢断：下一片段反正
+        // 会另起一行，交给 afterBinop 按源码保留。缩进：悬挂组里挂
+        // 在开括号行上的运算符链与开括号竖向对齐（同加号等行首双目
+        // 运算符的既有风格），其余（语句级、分隔式组、组内元素内部）
+        // 比上下文深一层
         const next = this.#tokens[i + 1]
         const trailing = !!next && newlinesBetween(t, next) > 0
         if (!inlineInnermost && (nl > 0 || (this.#m.pipeOverflow(i) && !trailing))) {
-          indent = this.#ctxIndent + this.#opts.indentSize
+          indent = this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
         }
         break
       }
@@ -253,11 +271,12 @@ export class Layout {
       case 'binop': {
         // 双目运算符（含关键字 and/or）：源码此处有换行，或其后的
         // 片段放不进本行，则以行首运算符断行，与本行（表达式起始行）
-        // 同层。尾随风格（运算符之后源码已换行）不抢断，理由同 pipe
+        // 同层 —— 悬挂组内即与开括号竖向对齐。尾随风格（运算符之后
+        // 源码已换行）不抢断，理由同 pipe
         const next = this.#tokens[i + 1]
         const trailing = !!next && newlinesBetween(t, next) > 0
         if (!inlineInnermost && (nl > 0 || (this.#m.operatorOverflow(i) && !trailing))) {
-          indent = this.#out.indentCols
+          indent = this.#hangingChainAlign(innerGroup) ?? this.#out.indentCols
         }
         break
       }
@@ -343,30 +362,31 @@ export class Layout {
           break
         }
         case 'afterClause':
-          // 子句关键字之后源码换行：分支内容另起一行，缩进取分支缩进
-          //（与子句关键字同层，但不浅于所在括号组的内容层）；elif 后是
+          // 子句关键字之后源码换行：分支内容另起一行，缩进为分支缩进
+          //（比子句关键字所在层与上下文层的较大者深一层）；elif 后是
           // 条件而非分支，回到上下文缩进。'end' 之后不另起分支行。
           if (p.text !== 'end' && nl > 0) indent = this.#bodyIndent?.indent ?? this.#ctxIndent
           break
         case 'afterBinop':
           // 双目运算符/管道之后（尾随风格）源码换行：操作数另起一行，
-          // 尊重源码的折行选择。缩进与对应的行首风格一致：管道比上下文
-          // 深一层，其余与运算符所在行同层
+          // 尊重源码的折行选择。缩进与对应的行首风格一致（见上方
+          // pipe / binop 两个相位 1 分支）
           if (nl > 0) {
             indent =
               p.text === '|'
-                ? this.#ctxIndent + this.#opts.indentSize
-                : this.#out.indentCols
+                ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
+                : this.#hangingChainAlign(innerGroup) ?? this.#out.indentCols
           }
           break
       }
     }
 
     if (indent === null && forced) {
-      // 注释尾随在 '|' 之后时，管道继续以 pipe 层断行
+      // 注释尾随在 '|' 之后时，管道继续以 pipe 层断行（悬挂组内同样
+      // 对齐开括号）
       indent =
         this.#prevReal && this.#prevReal.type === 'operator' && this.#prevReal.text === '|'
-          ? this.#ctxIndent + this.#opts.indentSize
+          ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
           : this.#ctxIndent
     }
 
@@ -392,7 +412,8 @@ export class Layout {
           closeIndent: this.#out.indentCols,
           // 开括号刚发射完毕：其起始列 = 当前行末列减去自身宽度
           alignCol: this.#out.col() - t.text.length,
-          leadSep: style.leadSep
+          leadSep: style.leadSep,
+          seenSep: false
         })
         if (style.expanded) {
           this.#ctxIndent = this.#out.indentCols + this.#opts.indentSize
@@ -402,6 +423,16 @@ export class Layout {
       } else if (CLOSERS.has(t.text)) {
         const g = this.#groups.pop()
         if (g) this.#ctxIndent = g.savedIndent
+      } else if (t.text === ',' || t.text === ';') {
+        // 顶层分隔符：此后悬挂组内的管道属于元素内部结构，
+        // 不再对齐开括号（见 hangingChainAlign）
+        const g = this.#groups[this.#groups.length - 1]
+        if (g) g.seenSep = true
+        if (t.text === ';') {
+          const top = this.#def.stack[this.#def.stack.length - 1]
+          if (top && top.depth === this.#groups.length)
+            this.#ctxIndent = this.#def.stack.pop()!.savedIndent
+        }
       } else if (t.text === ':') {
         if (this.#def.pendingDepth !== null && this.#groups.length === this.#def.pendingDepth) {
           // def 头部的 ':'：进入函数体，缩进一层，遇到配对的 ';' 恢复
@@ -437,9 +468,13 @@ export class Layout {
         this.#clauses.push({ kind: 'try', indent: this.#out.indentCols })
         this.#bodyIndent = null
       } else if (t.text === 'then' || t.text === 'else') {
-        // 进入 if 分支：分支缩进 = 子句关键字所在层与上下文层的较大者
+        // 进入 if 分支：分支内容比「子句关键字所在层与上下文层的
+        // 较大者」再深一层
         const clause = this.#findClauseIndent('if') ?? this.#ctxIndent
-        this.#bodyIndent = { indent: Math.max(clause, this.#ctxIndent), depth: this.#groups.length }
+        this.#bodyIndent = {
+          indent: Math.max(clause, this.#ctxIndent) + this.#opts.indentSize,
+          depth: this.#groups.length
+        }
       } else if (t.text === 'elif') {
         this.#bodyIndent = null // elif 之后是条件，不是分支
       } else if (t.text === 'end') {
@@ -447,7 +482,7 @@ export class Layout {
         this.#bodyIndent = null
       } else if (t.text === 'catch') {
         const clause = this.#findClauseIndent('try') ?? this.#ctxIndent
-        const indent = Math.max(clause, this.#ctxIndent)
+        const indent = Math.max(clause, this.#ctxIndent) + this.#opts.indentSize
         this.#popClause('try')
         this.#bodyIndent = { indent, depth: this.#groups.length }
       }
