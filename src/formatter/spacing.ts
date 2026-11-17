@@ -15,8 +15,11 @@ export const OPENERS = new Set(['(', '[', '{'])
 /** 闭括号 */
 export const CLOSERS = new Set([')', ']', '}'])
 
-/** 双目运算符：'-' 紧跟其后时只能是一元负号 */
-const BINOPS = new Set([
+/**
+ * 全部双目运算符（含 '|' 与 '?//'）：'-' 紧跟其后时只能是一元负号。
+ * 单一事实来源 —— 其余运算符集合一律从这里派生，不再各自维护清单。
+ */
+const BINOPS = [
   '|',
   '//',
   '?//',
@@ -39,34 +42,17 @@ const BINOPS = new Set([
   '/=',
   '%=',
   '//='
-])
+] as const
+
+const BINOP_SET = new Set<string>(BINOPS)
 
 /**
  * 可作行首断点的双目运算符：源码换行处保留、超宽时以行首运算符
  * 折行。'|' 另有行首管道规则，'?//' 是解构语法，均不在其中。
  */
-export const LINE_BREAK_BINOPS = new Set([
-  '//',
-  '==',
-  '!=',
-  '<',
-  '<=',
-  '>',
-  '>=',
-  '+',
-  '-',
-  '*',
-  '/',
-  '%',
-  '=',
-  '|=',
-  '+=',
-  '-=',
-  '*=',
-  '/=',
-  '%=',
-  '//='
-])
+export const LINE_BREAK_BINOPS = new Set<string>(
+  BINOPS.filter((op) => op !== '|' && op !== '?//')
+)
 
 /**
  * 格式化器内部的 token：在 tokenizer 的纯词法信息之上，额外标注了
@@ -137,7 +123,7 @@ function isPrefixPosition(t: Token | undefined): boolean {
       t.text === ';' ||
       t.text === ':' ||
       t.text === '$' ||
-      BINOPS.has(t.text)
+      BINOP_SET.has(t.text)
     )
   }
   if (t.type === 'keyword') return t.text !== 'end' // `end - 1` 是双目
