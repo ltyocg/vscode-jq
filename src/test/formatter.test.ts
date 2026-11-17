@@ -64,6 +64,17 @@ test('def formatting', () => {
     fmt('def f: .a;\n\n\ndef g: .b;\n.f'),
     'def f: .a;\n\ndef g: .b;\n.f\n',
   );
+  // ... also when the preceding "thing" is a comment block and this is
+  // the first code token of the file (jqjq.jq's header)
+  assert.equal(
+    fmt('# shebang block\n# notes\n\ndef f: .a;\n.f'),
+    '# shebang block\n# notes\n\ndef f: .a;\n.f\n',
+  );
+  // no blank in the source: none invented
+  assert.equal(
+    fmt('# c\ndef f: .a;\n.f'),
+    '# c\ndef f: .a;\n.f\n',
+  );
 });
 
 test('if/elif/else/end clauses', () => {
@@ -117,6 +128,32 @@ test('object construction', () => {
     fmt('{a: 1, # first\nb: 2}'),
     '{\n  a: 1,  # first\n  b: 2\n}\n',
   );
+});
+
+test('keyword-named object keys do not trigger clause logic', () => {
+  // keys named like clause/def keywords must stay inline and must not
+  // open/close if/try contexts or be treated as definitions
+  assert.equal(
+    fmt('{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}'),
+    '{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}\n',
+  );
+  // a key must not capture or pop the clause indent of a real if
+  const src = 'if .a\nthen {if: 1, end: 2}\nelse .b\nend';
+  assert.equal(fmt(src), src + '\n');
+  // the jqjq shape: keyword keys inside a paren group (was unstable
+  // across repeated formats when commas moved from leading to trailing)
+  const src2 = [
+    'def f:',
+    '  ( { cond: 1',
+    '    , then: 2',
+    '    , else: 3',
+    '    }',
+    '    | if .x then .y else . end',
+    '  );',
+    'f',
+  ].join('\n');
+  const once = fmt(src2);
+  assert.equal(fmt(once), once, 'not idempotent for jqjq-like object keys');
 });
 
 test('import / include / module', () => {

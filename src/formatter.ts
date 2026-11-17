@@ -47,6 +47,20 @@ function countNewlines(s: string): number {
 }
 
 /**
+ * True when tokens[k] is a keyword used as an object key, as in
+ * `{if: 1, end: 2}` — jq reserves the words but still allows them as
+ * keys. Such a keyword must not trigger clause breaks or clause state:
+ * `{if: ...}` opens no if-context, `{end: ...}` closes none, and
+ * `{def: ...}` is not a definition. A clause keyword is never legally
+ * followed by ':' otherwise, so this lookahead is unambiguous.
+ */
+function isObjectKey(tokens: Token[], k: number): boolean {
+  const t = tokens[k];
+  const n = tokens[k + 1];
+  return t.type === 'keyword' && !!n && n.type === 'operator' && n.text === ':';
+}
+
+/**
  * Trim trailing whitespace from a rendered line — except that one space is
  * kept when what remains ends with an odd run of backslashes. Dropping it
  * would turn the following output line into a jq comment continuation
@@ -245,7 +259,8 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
             return k;
           }
           if (tk.type === 'keyword' &&
-              (CLAUSE_KEYWORDS.has(tk.text) || tk.text === 'def')) {
+              (CLAUSE_KEYWORDS.has(tk.text) || tk.text === 'def') &&
+              !isObjectKey(tokens, k)) {
             return k;
           }
         }
@@ -332,12 +347,23 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
       continue;
     }
 
-    const nl = prevReal ? t.line - lastRealEndLine : 0;
+    // Gap since the last code token. When the file starts with comments
+    // (no code token yet), measure from the last comment instead, so a
+    // blank line between a leading comment block and the first def
+    // survives formatting instead of being silently dropped.
+    const nl = prevReal
+      ? t.line - lastRealEndLine
+      : lastAnyEndLine >= 0
+        ? t.line - lastAnyEndLine
+        : 0;
     const forced = pendingForcedBreak;
     pendingForcedBreak = false;
 
     const innerGroup = groupStack[groupStack.length - 1];
     const inlineInnermost = groupStack.length > 0 && !innerGroup!.expanded;
+
+    // `{if: 1}` — keyword as object key, not a clause/def keyword.
+    const objectKey = isObjectKey(tokens, i);
 
     // -- break decision (first match wins) --
     let breakLevels: number | null = null;
@@ -351,7 +377,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
       } else if (CLOSERS.has(t.text)) {
         if (innerGroup && innerGroup.expanded) breakLevels = innerGroup.closeIndent;
       }
-    } else if (t.type === 'keyword') {
+    } else if (t.type === 'keyword' && !objectKey) {
       if (CLAUSE_KEYWORDS.has(t.text)) {
         if (!inlineInnermost && (nl > 0 || clauseOverflow(i))) {
           breakLevels = findClauseIndent(
@@ -440,7 +466,7 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
           ctxIndent = defStack.pop()!.savedIndent;
         }
       }
-    } else if (t.type === 'keyword') {
+    } else if (t.type === 'keyword' && !objectKey) {
       if (t.text === 'def') {
         // Only a real definition: 'def' IDENT (':' | '(' ...)
         const n1 = tokens[i + 1];
