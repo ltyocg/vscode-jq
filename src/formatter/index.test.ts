@@ -359,6 +359,38 @@ test('source break after a reduce as-pattern is preserved', () => {
   )
 })
 
+test('single-key object with an internally breaking value stays hanging', () => {
+  // 首个断点落在嵌套组内部的单键对象：悬挂式判定按首个实际断点量
+  // 开括号行宽度，而不是整组平铺 —— 否则键会被挤到单独一行
+  //（jqjq 语料 629 行的形态）
+  const src = [
+    '[ .',
+    '  , { term:',
+    '      { type: "TermTypeReduce"',
+    '      , reduce:',
+    '          { term: $term.term',
+    '          , pattern: $pattern',
+    '          }',
+    '      }',
+    '    }',
+    '  ]'
+  ].join('\n')
+  const expected = [
+    '[ .',
+    ', { term:',
+    '  { type: "TermTypeReduce"',
+    '  , reduce:',
+    '    { term: $term.term',
+    '    , pattern: $pattern',
+    '    }',
+    '  }',
+    '}',
+    ']'
+  ].join('\n') + '\n'
+  assert.equal(fmt(src), expected)
+  assert.equal(fmt(expected), expected)
+})
+
 test('trailing-style binop and pipe breaks are preserved', () => {
   // 运算符留在行尾的折行（尾随风格）与行首风格同样尊重源码：
   // 双目运算符之后的操作数与本行同层，管道之后深一层

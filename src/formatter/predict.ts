@@ -160,27 +160,35 @@ export class Predict {
   }
 
   /**
-   * 组内第一个顶层断点候选（','、';'、'|' 或子句关键字）的下标；
-   * 没有则为闭括号下标。用于测量悬挂式开括号行的宽度。
+   * 开括号行（悬挂式判定的宽度预算）的首个实际断点下标；没有则为
+   * 闭括号下标。深度 0 的潜在断点候选与 decideBreak 一致（前导分隔
+   * 符、行首管道/双目运算符、子句关键字；reduce 的 '(' 与尾随双目
+   * 运算符/管道只在源码确有换行处终结预算）。嵌套组若自身会断行，
+   * 预算延伸进它的首行：悬挂式递归取其首个断点，分隔式在开括号后
+   * 即断；不会断行的嵌套组渲染为单行、整个跳过。单键对象这类「首个
+   * 断点落在嵌套组内部」的组，若不递归就会按整组平铺量宽，被误判
+   * 成分隔式、把键挤到单独一行。
    */
   firstSeparator(i: number, close: number): number {
-    let depth = 0
     for (let k = i + 1; k < close; k++) {
       const tk = this.#st.tokens[k]
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-      else if (depth === 0) {
-        // 悬挂式开括号行的首个宽度预算断点：前导分隔符、行首管道/
-        // 双目运算符或子句关键字（def 不在其列）。reduce 的 '(' 与
-        // 尾随双目运算符/管道只在源码确有换行处终结预算（无超宽补断）
-        const bk = breakBefore(this.#st, k)
-        if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
-        if (
-          (bk === 'reduce' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0) ||
-          (breakAfter(this.#st, k - 1) === 'afterBinop' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0)
-        )
-          return k
+      if (tk.type === 'operator' && OPENERS.has(tk.text)) {
+        const innerClose = this.#st.match.get(k)!
+        const style = this.groupStyle(k)
+        if (!style.expanded) {
+          k = innerClose // 不会断行的嵌套组：渲染为单行，跳过
+          continue
+        }
+        // 会断行的嵌套组：开括号行延伸进它的首行
+        return style.hanging ? this.firstSeparator(k, innerClose) : k + 1
       }
+      const bk = breakBefore(this.#st, k)
+      if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
+      if (
+        (bk === 'reduce' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0) ||
+        (breakAfter(this.#st, k - 1) === 'afterBinop' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0)
+      )
+        return k
     }
     return close
   }
