@@ -9,7 +9,16 @@
 
 import type { FormatOptions } from './api'
 import { LineBuilder, trimLineEnd } from './emit'
-import { CLAUSE_KEYWORDS, CLOSERS, LINE_BREAK_BINOPS, OPENERS, gapBetween, type FmtToken } from './spacing'
+import {
+  CLAUSE_KEYWORDS,
+  CLOSERS,
+  LINE_BREAK_BINOPS,
+  OPENERS,
+  gapBetween,
+  padsInsideBracket,
+  type BracketStyle,
+  type FmtToken
+} from './spacing'
 import {
   MAX_SEGMENT_LOOKAHEAD,
   TokenStream,
@@ -85,6 +94,17 @@ interface BreakDecision {
   indent: number | null
 }
 
+/**
+ * flatSpan 的补位风格：跨距内的组一律按单行模拟（见 spacing.ts 的
+ * padsInsideBracket）。stack 是跨距内已开未闭的括号种类栈，
+ * 空栈表示当前不在任何组内。
+ */
+function flatStyle(stack: string[]): BracketStyle | null {
+  return stack.length
+    ? { kind: stack[stack.length - 1] as BracketStyle['kind'], expanded: false, hanging: false }
+    : null
+}
+
 export class Layout {
   // -- 语法上下文 --
   private readonly groups: GroupCtx[] = []
@@ -150,7 +170,7 @@ export class Layout {
         if (!this.out.hasContent) this.emitBlanks(blanks)
         const space = this.prevReal
           ? gapBetween(this.prevReal, t, this.enclosingKind) === 'space' ||
-            this.bracketPadding(this.prevReal, t)
+            padsInsideBracket(this.prevReal, t, this.groups[this.groups.length - 1] ?? null)
           : false
         this.out.append(t.text, space)
       }
@@ -180,23 +200,6 @@ export class Layout {
   private get enclosingKind(): string {
     const g = this.groups[this.groups.length - 1]
     return g ? g.kind : ''
-  }
-
-  /**
-   * 括号内侧补一个空格（空组除外）：
-   *  - 单行组：只有对象大括号补；
-   *  - 悬挂式展开组（开括号后接内容）：各种括号都补，开括号之后、
-   *    与内容同行的闭括号之前各恰好一个。
-   * 补空格只在 token 续在本行时生效（LineBuilder.append 在行首不加
-   * 空格），断行处自然没有空格，分隔式展开组因此不受影响。
-   */
-  private bracketPadding(prev: FmtToken, t: FmtToken): boolean {
-    const g = this.groups[this.groups.length - 1]
-    if (!g || !(g.hanging || (!g.expanded && g.kind === '{'))) return false
-    const prevIsOpener = prev.type === 'operator' && OPENERS.has(prev.text)
-    const tIsCloser = t.type === 'operator' && CLOSERS.has(t.text)
-    if (prevIsOpener && tIsCloser) return false // 空组 '{}'
-    return prevIsOpener || tIsCloser
   }
 
   private emitComment(t: FmtToken): void {
@@ -454,7 +457,7 @@ export class Layout {
       const enclosing = stack.length ? stack[stack.length - 1] : hint
       if (prev) {
         if (gapBetween(prev, tk, enclosing) === 'space') out += ' '
-        else if (this.flatPad(prev, tk, stack)) out += ' '
+        else if (padsInsideBracket(prev, tk, flatStyle(stack))) out += ' '
       }
       out += tk.text
       if (tk.type === 'operator' && OPENERS.has(tk.text)) stack.push(tk.text)
@@ -462,20 +465,6 @@ export class Layout {
       prev = tk
     }
     return out
-  }
-
-  /**
-   * flatSpan 按单行模拟，跨距内的组一律视为不换行：只有对象大括号组
-   * 在开括号之后、闭括号之前各补一个空格（空组除外；闭括号还需配对
-   * 开括号在跨距内）。与发射路径的 bracketPadding 保持一致，宽度
-   * 测量才不漂移。
-   */
-  private flatPad(prev: FmtToken, tk: FmtToken, stack: string[]): boolean {
-    const prevIsOpener = prev.type === 'operator' && OPENERS.has(prev.text)
-    const tkIsCloser = tk.type === 'operator' && CLOSERS.has(tk.text)
-    if (prevIsOpener && tkIsCloser) return false // 空组 '{}'
-    if (prevIsOpener) return prev.text === '{'
-    return tkIsCloser && stack.length > 0 && stack[stack.length - 1] === '{'
   }
 
   /** 从 j 起第一个合法断点（不含 j 自身）的下标。 */

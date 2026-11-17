@@ -63,6 +63,41 @@ export interface FmtToken extends Token {
 }
 
 /**
+ * 括号组的布局风格子集 —— layout.ts 的 GroupCtx 中与内侧补位有关的
+ * 三个字段。null 表示不在任何括号组内。
+ */
+export interface BracketStyle {
+  kind: '(' | '[' | '{'
+  /** 是否展开为多行 */
+  expanded: boolean
+  /** 悬挂式（开括号后接了内容） */
+  hanging: boolean
+}
+
+/**
+ * 括号内侧是否补一个空格（空组除外）：
+ *  - 单行组：只有对象大括号补；
+ *  - 悬挂式展开组（开括号后接内容）：各种括号都补，开括号之后、
+ *    与内容同行的闭括号之前各恰好一个。
+ * 发射路径传入 token 所在组的真实风格；宽度测量（flatSpan）按单行
+ * 模拟传 { expanded: false, hanging: false } —— 同一条规则服务两个
+ * 上下文，宽度测量才不会与发射漂移。补空格只在 token 续在本行时
+ * 生效（LineBuilder.append 在行首不加空格），断行处自然没有空格，
+ * 分隔式展开组因此不受影响。
+ */
+export function padsInsideBracket(
+  prev: FmtToken,
+  tk: FmtToken,
+  style: BracketStyle | null
+): boolean {
+  if (!style || !(style.hanging || (!style.expanded && style.kind === '{'))) return false
+  const prevIsOpener = prev.type === 'operator' && OPENERS.has(prev.text)
+  const tkIsCloser = tk.type === 'operator' && CLOSERS.has(tk.text)
+  if (prevIsOpener && tkIsCloser) return false // 空组 '{}'
+  return prevIsOpener || tkIsCloser
+}
+
+/**
  * 标注每个 '-' 是一元还是双目，返回新数组，不修改输入。
  * 一元负号只影响间距（'-1' 紧贴操作数，'1 - 2' 两侧留空格），
  * 是排版问题而不是词法问题，所以由格式化器完成；tokenizer 的
