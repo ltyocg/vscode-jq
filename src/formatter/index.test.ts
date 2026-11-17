@@ -307,9 +307,11 @@ test('leading separators align with the opening bracket', () => {
 })
 
 test('object values break after the colon where the source does', () => {
-  // 对象键的冒号之后源码换行：值另起一行，比键所在行深一层
-  assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n  value\n}\n')
-  assert.equal(fmt('[ { a:\n    1\n}\n]'), '[ { a:\n  1\n}\n]\n')
+  // 对象键的冒号之后源码换行：值另起一行。冒号之下开启一个层级：
+  // 值比所在对象组的内容层（键所在的层）深一层 —— 悬挂组里键所在
+  // 行的行首属于外层，按行首算会让值与开括号平级
+  assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n    value\n}\n')
+  assert.equal(fmt('[ { a:\n    1\n}\n]'), '[ { a:\n    1\n}\n]\n')
   // 冒号后源码未换行：值留在本行
   assert.equal(fmt('{ a: 1,\n  b: 2\n}'), '{ a: 1,\n  b: 2\n}\n')
   // 切片冒号不受影响
@@ -321,7 +323,7 @@ test('elements that break internally stay on the separator line', () => {
   // 不在分隔符后强行另起一行，避免分隔符孤零零留在行尾
   assert.equal(
     fmt('{ a: 1\n, key:\n    ( if x then y\n       else z\n       end\n     )\n}'),
-    '{ a: 1\n, key:\n  ( if x then y\n  else z\n  end\n  )\n}\n'
+    '{ a: 1\n, key:\n    ( if x then y\n    else z\n    end\n    )\n}\n'
   )
 })
 
@@ -378,12 +380,12 @@ test('single-key object with an internally breaking value stays hanging', () => 
   const expected = [
     '[ .',
     ', { term:',
-    '  { type: "TermTypeReduce"',
-    '  , reduce:',
-    '    { term: $term.term',
-    '    , pattern: $pattern',
+    '    { type: "TermTypeReduce"',
+    '    , reduce:',
+    '        { term: $term.term',
+    '        , pattern: $pattern',
+    '        }',
     '    }',
-    '  }',
     '}',
     ']'
   ].join('\n') + '\n'

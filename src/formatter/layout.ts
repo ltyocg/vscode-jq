@@ -351,8 +351,11 @@ export class Layout {
             innerGroup.expanded &&
             nl > 0
           ) {
-            // 对象键的冒号之后：源码换行处保留，值比键所在行深一层
-            indent = this.#out.indentCols + this.#opts.indentSize
+            // 对象键的冒号之后：源码换行处保留。冒号之下开启一个
+            // 层级 —— 值比所在对象组的内容层（键所在的层）深一层，
+            // 而不是比键所在行的行首深一层（悬挂组里行首属于外层，
+            // 那样值会与开括号平级）
+            indent = this.#ctxIndent + this.#opts.indentSize
           }
           break
         case 'afterOpener': {
