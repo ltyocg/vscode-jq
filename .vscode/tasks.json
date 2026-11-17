@@ -3,15 +3,8 @@
   "tasks": [
     {
       "label": "compile",
-      "type": "shell",
-      "command": "pnpm",
-      "args": ["run", "compile"],
-      "options": {
-        "shell": {
-          "executable": "/bin/zsh",
-          "args": ["-lic"]
-        }
-      },
+      "type": "npm",
+      "script": "compile",
       "group": {
         "kind": "build",
         "isDefault": true
