@@ -9,7 +9,11 @@ import * as path from 'path';
 function isExecutableFile(p: string): boolean {
   try {
     const st = fs.statSync(p);
-    return st.isFile() && (st.mode & 0o111) !== 0;
+    if (!st.isFile()) return false;
+    // Windows has no execute bit: statSync reports mode 0o666 for every
+    // regular file, .exe included. Any regular file counts as runnable.
+    if (process.platform === 'win32') return true;
+    return (st.mode & 0o111) !== 0;
   } catch {
     return false;
   }
