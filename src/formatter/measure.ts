@@ -23,12 +23,16 @@ function flatStyle(stack: string[]): BracketStyle | null {
 }
 
 export class Measure {
-  constructor(
-    private readonly st: TokenStream,
-    private readonly opts: FormatOptions,
-    /** 当前发射列数 —— 测量是活的，随发射进度变化 */
-    private readonly col: () => number
-  ) {}
+  readonly #st: TokenStream
+  readonly #opts: FormatOptions
+  /** 当前发射列数 —— 测量是活的，随发射进度变化 */
+  readonly #col: () => number
+
+  constructor(st: TokenStream, opts: FormatOptions, col: () => number) {
+    this.#st = st
+    this.#opts = opts
+    this.#col = col
+  }
 
   /**
    * 把 tokens[start, end) 试排成一行；片段含注释时返回 null。
@@ -42,7 +46,7 @@ export class Measure {
     const stack: string[] = []
     let prev: FmtToken | undefined
     for (let k = start; k < end; k++) {
-      const tk = this.st.tokens[k]
+      const tk = this.#st.tokens[k]
       if (tk.type === 'comment') {
         if (!ignoreComments) return null
         continue
@@ -63,25 +67,25 @@ export class Measure {
   /** 从 j 起第一个合法断点（不含 j 自身）的下标。 */
   findSegmentEnd(j: number): number {
     let depth = 0
-    const cap = Math.min(this.st.tokens.length, j + MAX_SEGMENT_LOOKAHEAD)
+    const cap = Math.min(this.#st.tokens.length, j + MAX_SEGMENT_LOOKAHEAD)
     for (let k = j; k < cap; k++) {
-      const tk = this.st.tokens[k]
+      const tk = this.#st.tokens[k]
       if (k > j) {
         if (tk.type === 'comment') return k // 注释永远终结它所在的一行
         // 深度 0 的任意断点种类都终结片段（词汇表的全集）
-        if (depth === 0 && breakBefore(this.st, k) !== null) return k
+        if (depth === 0 && breakBefore(this.#st, k) !== null) return k
       }
       if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
       else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
     }
-    return this.st.tokens.length
+    return this.#st.tokens.length
   }
 
   /** 从 j 起下一个片段的单行宽度；含注释（不可平铺）时为无穷。 */
   segmentWidth(j: number): number {
     // 前置的行尾注释贴在当前行上，不计入其后片段的宽度
     let start = j
-    while (start < this.st.tokens.length && this.st.tokens[start].type === 'comment') start++
+    while (start < this.#st.tokens.length && this.#st.tokens[start].type === 'comment') start++
     const flat = this.flatSpan(start, this.findSegmentEnd(start), '')
     return flat === null ? Infinity : flat.length
   }
@@ -89,7 +93,7 @@ export class Measure {
   /** '|' 之后的片段是否会超出行宽（3 是 ' | ' 的宽度）。 */
   pipeOverflow(i: number): boolean {
     const seg = this.segmentWidth(i + 1)
-    return seg === Infinity || this.col() + 3 + seg > this.opts.printWidth
+    return seg === Infinity || this.#col() + 3 + seg > this.#opts.printWidth
   }
 
   /** 双目运算符续在本行是否会超宽（运算符两侧各一个空格 + 其后片段）。 */
@@ -97,7 +101,7 @@ export class Measure {
     const seg = this.segmentWidth(i + 1)
     return (
       seg === Infinity ||
-      this.col() + this.st.tokens[i].text.length + 2 + seg > this.opts.printWidth
+      this.#col() + this.#st.tokens[i].text.length + 2 + seg > this.#opts.printWidth
     )
   }
 
@@ -107,18 +111,18 @@ export class Measure {
    * 后续行，不把关键字挤到单独一行。
    */
   clauseOverflow(i: number): boolean {
-    const t = this.st.tokens[i]
+    const t = this.#st.tokens[i]
     if (t.text !== 'then' && t.text !== 'elif' && t.text !== 'else') return false
-    const next = this.st.tokens[i + 1]
+    const next = this.#st.tokens[i + 1]
     if (next === undefined || next.type === 'comment') return false
     if (next.line > endLine(t)) return false
     const seg = this.segmentWidth(i + 1)
-    return seg === Infinity || this.col() + t.text.length + 1 + seg > this.opts.printWidth
+    return seg === Infinity || this.#col() + t.text.length + 1 + seg > this.#opts.printWidth
   }
 
   /** 悬挂组内：当前元素续在本行是否会超宽（1 是元素前的一个空格） */
   elementOverflow(i: number): boolean {
     const seg = this.segmentWidth(i)
-    return seg === Infinity || this.col() + 1 + seg > this.opts.printWidth
+    return seg === Infinity || this.#col() + 1 + seg > this.#opts.printWidth
   }
 }

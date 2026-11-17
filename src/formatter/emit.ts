@@ -14,49 +14,49 @@ export function trimLineEnd(s: string): string {
 }
 
 export class LineBuilder {
-  private readonly lines: string[] = []
-  private cur = ''
+  readonly #lines: string[] = []
+  #cur = ''
   /** 当前行的缩进列数（空格数，不一定是 indentSize 的倍数 ——
    * 行中开括号的列对齐会落在任意列上） */
-  private curIndent = 0
+  #curIndent = 0
 
   /** 当前行已写到的列（含缩进），供行宽判断使用 */
   col(): number {
-    return this.curIndent + this.cur.length
+    return this.#curIndent + this.#cur.length
   }
 
   /** 当前行是否已有内容 */
   get hasContent(): boolean {
-    return this.cur !== ''
+    return this.#cur !== ''
   }
 
   /** 正在拼的当前行的缩进列数 */
   get indentCols(): number {
-    return this.curIndent
+    return this.#curIndent
   }
 
   /** 另起一行，缩进 cols 列（之前未结束的当前行需先 finishLine） */
   startLine(cols: number): void {
-    this.cur = ''
-    this.curIndent = cols
+    this.#cur = ''
+    this.#curIndent = cols
   }
 
   /** 结束当前行（去行尾空白）落入输出 */
   finishLine(): void {
-    this.lines.push(this.indentStr(this.curIndent) + trimLineEnd(this.cur))
-    this.cur = ''
+    this.#lines.push(this.#indentStr(this.#curIndent) + trimLineEnd(this.#cur))
+    this.#cur = ''
   }
 
   /** 追加一段文本；space 为 true 且当前行非空时补一个空格 */
   append(text: string, space: boolean): void {
-    if (space && this.cur !== '') this.cur += ' '
-    this.cur += text
+    if (space && this.#cur !== '') this.#cur += ' '
+    this.#cur += text
   }
 
   /** 行尾注释：与代码之间按源码间距保留 spaces 个空格（当前行为空时直接开始） */
   appendTrailingComment(text: string, spaces: number): void {
-    if (this.cur === '') this.cur = text
-    else this.cur += ' '.repeat(spaces) + text
+    if (this.#cur === '') this.#cur = text
+    else this.#cur += ' '.repeat(spaces) + text
   }
 
   /**
@@ -64,32 +64,32 @@ export class LineBuilder {
    * 直接落入输出，并从这里继续拼下一行。
    */
   addStandaloneLine(cols: number, text: string): void {
-    if (this.cur !== '') this.finishLine()
-    this.lines.push(this.indentStr(cols) + text)
+    if (this.#cur !== '') this.finishLine()
+    this.#lines.push(this.#indentStr(cols) + text)
     this.startLine(cols)
   }
 
   /** 已输出的最后一行；还没有任何输出时为 undefined */
   lastLine(): string | undefined {
-    return this.lines[this.lines.length - 1]
+    return this.#lines[this.#lines.length - 1]
   }
 
   /** 补 n 个空行（用于保留源码中的空行） */
   addBlankLines(n: number): void {
-    for (let k = 0; k < n; k++) this.lines.push('')
+    for (let k = 0; k < n; k++) this.#lines.push('')
   }
 
   /** 去掉末尾连续的空行 */
   trimTrailingBlankLines(): void {
-    while (this.lines.length > 0 && this.lines[this.lines.length - 1] === '') this.lines.pop()
+    while (this.#lines.length > 0 && this.#lines[this.#lines.length - 1] === '') this.#lines.pop()
   }
 
   /** 以指定换行符连接全部输出行 */
   join(eol: string): string {
-    return this.lines.join(eol)
+    return this.#lines.join(eol)
   }
 
-  private indentStr(cols: number): string {
+  #indentStr(cols: number): string {
     return ' '.repeat(cols)
   }
 }
