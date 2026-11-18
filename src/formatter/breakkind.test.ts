@@ -36,22 +36,64 @@ test('breakBefore classifies clause and def keywords, object keys excluded', () 
     assert.equal(breakBefore(st, k), 'clause')
   }
   const st2 = stream('.x | def f: .a; f')
-  assert.equal(breakBefore(st2, st2.tokens.findIndex((t) => t.text === 'def')), 'def')
+  assert.equal(
+    breakBefore(
+      st2,
+      st2.tokens.findIndex((t) => t.text === 'def')
+    ),
+    'def'
+  )
   // 文件首的 def 没有前置内容，不算断点
   const st3 = stream('def f: .a; f')
   assert.equal(breakBefore(st3, 0), null)
   // `{if: 1}` —— 对象键不是子句/def 断点
   const st4 = stream('{if: 1, def: 2}')
-  assert.equal(breakBefore(st4, st4.tokens.findIndex((t) => t.text === 'if')), null)
-  assert.equal(breakBefore(st4, st4.tokens.findIndex((t) => t.text === 'def')), null)
+  assert.equal(
+    breakBefore(
+      st4,
+      st4.tokens.findIndex((t) => t.text === 'if')
+    ),
+    null
+  )
+  assert.equal(
+    breakBefore(
+      st4,
+      st4.tokens.findIndex((t) => t.text === 'def')
+    ),
+    null
+  )
 })
 
 test('breakAfter classifies trigger tokens', () => {
   const st = stream('[1, {a: 1}]')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === '[')), 'afterOpener')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === ',')), 'afterSep')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === ':')), 'afterColon')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === '1')), null)
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === '[')
+    ),
+    'afterOpener'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === ',')
+    ),
+    'afterSep'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === ':')
+    ),
+    'afterColon'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === '1')
+    ),
+    null
+  )
 
   const st2 = stream('if .a then .b else .c end')
   for (const kw of ['then', 'else', 'end']) {
@@ -60,7 +102,13 @@ test('breakAfter classifies trigger tokens', () => {
   }
   // 对象键关键字仍是 afterClause（decide/predict 两侧都不加对象键守卫）
   const st3 = stream('{then: 1}')
-  assert.equal(breakAfter(st3, st3.tokens.findIndex((t) => t.text === 'then')), 'afterClause')
+  assert.equal(
+    breakAfter(
+      st3,
+      st3.tokens.findIndex((t) => t.text === 'then')
+    ),
+    'afterClause'
+  )
 })
 
 test('breakBefore classifies the reduce/foreach group paren after an as pattern', () => {
@@ -69,7 +117,7 @@ test('breakBefore classifies the reduce/foreach group paren after an as pattern'
     'reduce .[] as $x (0; . + $x)',
     'foreach .[] as $x (0; . + $x; .)',
     'reduce .[] as [$k, $v] (0; .)',
-    'reduce .[] as [$k, [$v]] (0; .)',
+    'reduce .[] as [$k, [$v]] (0; .)'
   ]) {
     const st = stream(src)
     const k = st.tokens.findIndex((t, i) => t.text === '(' && i > 2)
@@ -85,23 +133,83 @@ test('breakBefore classifies the reduce/foreach group paren after an as pattern'
 
 test('keyword binops and/or are break points, object keys excluded', () => {
   const st = stream('.a and .b or .c')
-  assert.equal(breakBefore(st, st.tokens.findIndex((t) => t.text === 'and')), 'binop')
-  assert.equal(breakBefore(st, st.tokens.findIndex((t) => t.text === 'or')), 'binop')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === 'and')), 'afterBinop')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === 'or')), 'afterBinop')
+  assert.equal(
+    breakBefore(
+      st,
+      st.tokens.findIndex((t) => t.text === 'and')
+    ),
+    'binop'
+  )
+  assert.equal(
+    breakBefore(
+      st,
+      st.tokens.findIndex((t) => t.text === 'or')
+    ),
+    'binop'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === 'and')
+    ),
+    'afterBinop'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === 'or')
+    ),
+    'afterBinop'
+  )
   // `{and: 1, or: 2}` —— 对象键不是双目断点
   const st2 = stream('{and: 1, or: 2}')
-  assert.equal(breakBefore(st2, st2.tokens.findIndex((t) => t.text === 'and')), null)
-  assert.equal(breakAfter(st2, st2.tokens.findIndex((t) => t.text === 'or')), null)
+  assert.equal(
+    breakBefore(
+      st2,
+      st2.tokens.findIndex((t) => t.text === 'and')
+    ),
+    null
+  )
+  assert.equal(
+    breakAfter(
+      st2,
+      st2.tokens.findIndex((t) => t.text === 'or')
+    ),
+    null
+  )
 })
 
 test('breakAfter classifies trailing-style binops and pipes', () => {
   const st = stream('.a | .b + .c // .d')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === '|')), 'afterBinop')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === '+')), 'afterBinop')
-  assert.equal(breakAfter(st, st.tokens.findIndex((t) => t.text === '//')), 'afterBinop')
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === '|')
+    ),
+    'afterBinop'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === '+')
+    ),
+    'afterBinop'
+  )
+  assert.equal(
+    breakAfter(
+      st,
+      st.tokens.findIndex((t) => t.text === '//')
+    ),
+    'afterBinop'
+  )
   // 一元 '-' 之后不是断点；'?//' 不在行首双目之列
   assert.equal(breakAfter(stream('-1'), 0), null)
   const st2 = stream('.a as [$x] ?// $y | $x')
-  assert.equal(breakAfter(st2, st2.tokens.findIndex((t) => t.text === '?//')), null)
+  assert.equal(
+    breakAfter(
+      st2,
+      st2.tokens.findIndex((t) => t.text === '?//')
+    ),
+    null
+  )
 })

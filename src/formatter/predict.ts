@@ -83,7 +83,12 @@ export class Predict {
     // 展开且会断行：首个内容在开括号行、且首个元素放得进该行，
     // 用悬挂式；否则分隔式。开括号行上的行尾注释不参与宽度测量
     if (!this.firstOnOpenerLine(i, close)) return { expanded: true, hanging: false, leadSep }
-    const flat = this.#m.flatSpan(i + 1, this.firstSeparator(i, close), this.#st.tokens[i].text, true)
+    const flat = this.#m.flatSpan(
+      i + 1,
+      this.firstSeparator(i, close),
+      this.#st.tokens[i].text,
+      true
+    )
     if (flat === null) return { expanded: true, hanging: false, leadSep }
     // +2：开括号后的补位空格 + 其后的分隔符（或闭括号）
     if (this.#col() + flat.length + 2 > this.#opts.printWidth) {
@@ -186,7 +191,8 @@ export class Predict {
       if (bk === 'leadSep' || bk === 'pipe' || bk === 'binop' || bk === 'clause') return k
       if (
         (bk === 'reduce' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0) ||
-        (breakAfter(this.#st, k - 1) === 'afterBinop' && newlinesBetween(this.#st.tokens[k - 1], tk) > 0)
+        (breakAfter(this.#st, k - 1) === 'afterBinop' &&
+          newlinesBetween(this.#st.tokens[k - 1], tk) > 0)
       )
         return k
     }
@@ -207,7 +213,10 @@ export class Predict {
       if (k > j) {
         if (tk.type === 'comment') return true
         // 元素边界：同层分隔符或闭括号
-        if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';' || CLOSERS.has(tk.text))) {
+        if (
+          tk.type === 'operator' &&
+          (tk.text === ',' || tk.text === ';' || CLOSERS.has(tk.text))
+        ) {
           return false
         }
         const prev = this.#st.tokens[k - 1]

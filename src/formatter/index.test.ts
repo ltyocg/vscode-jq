@@ -279,7 +279,10 @@ test('keyword field names after a dot keep source adjacency', () => {
   // 字（语法错误）；反方向同样危险：'else . end' 收紧成 '.end' 会变成
   // 字段访问。点号与关键字之间的间距只能按源码邻接保留，不可归一化
   assert.equal(fmt('.catch = $c'), '.catch = $c\n')
-  assert.equal(fmt('if $end_ then .end = $end_ else . end'), 'if $end_ then .end = $end_ else . end\n')
+  assert.equal(
+    fmt('if $end_ then .end = $end_ else . end'),
+    'if $end_ then .end = $end_ else . end\n'
+  )
   assert.equal(fmt('{a: $if_.then, b: $if_.else}'), '{a: $if_.then, b: $if_.else}\n')
   assert.equal(fmt('$q.term.reduce as $r'), '$q.term.reduce as $r\n')
   // 源码有空格的保持空格（身份 + 子句关键字）
@@ -307,7 +310,10 @@ test('leading separators align with the opening bracket', () => {
   // 悬挂组里源码在 ','/';' 之前换行：分隔符提到行首，与开括号同列
   assert.equal(fmt('{ a: 1\n, b: 2\n}'), '{ a: 1\n, b: 2\n}\n')
   assert.equal(fmt('[ 1\n, 2\n]'), '[ 1\n, 2\n]\n')
-  assert.equal(fmt('reduce .[] as $x ( 0\n; . + $x\n)'), 'reduce .[] as $x ( 0\n                 ; . + $x\n                 )\n')
+  assert.equal(
+    fmt('reduce .[] as $x ( 0\n; . + $x\n)'),
+    'reduce .[] as $x ( 0\n                 ; . + $x\n                 )\n'
+  )
   // 开括号在行中间（前导运算符之后）：前导分隔符与闭括号对齐到开括号列
   assert.equal(
     fmt('p\n+ { "ENV": $env # comment\n  , "ARGS": $opts\n  }'),
@@ -352,7 +358,10 @@ test('then stays on the elif line when the source breaks after it', () => {
   )
   // 源码在 then 之后换行：分支内容另起一行，比子句关键字深一层，
   // 分支内的注释对齐到分支内容
-  assert.equal(fmt('if .a then\n  # note\n  .b\nelse\n  .c\nend'), 'if .a then\n  # note\n  .b\nelse\n  .c\nend\n')
+  assert.equal(
+    fmt('if .a then\n  # note\n  .b\nelse\n  .c\nend'),
+    'if .a then\n  # note\n  .b\nelse\n  .c\nend\n'
+  )
   // then 之后源码未换行：内容留在本行
   assert.equal(fmt('if .a then .b\nelse .c\nend'), 'if .a then .b\nelse .c\nend\n')
 })
@@ -392,18 +401,19 @@ test('single-key object with an internally breaking value stays hanging', () => 
     '    }',
     '  ]'
   ].join('\n')
-  const expected = [
-    '[ .',
-    ', { term:',
-    '      { type: "TermTypeReduce"',
-    '      , reduce:',
-    '          { term: $term.term',
-    '          , pattern: $pattern',
-    '          }',
-    '      }',
-    '  }',
-    ']'
-  ].join('\n') + '\n'
+  const expected =
+    [
+      '[ .',
+      ', { term:',
+      '      { type: "TermTypeReduce"',
+      '      , reduce:',
+      '          { term: $term.term',
+      '          , pattern: $pattern',
+      '          }',
+      '      }',
+      '  }',
+      ']'
+    ].join('\n') + '\n'
   assert.equal(fmt(src), expected)
   assert.equal(fmt(expected), expected)
 })
@@ -430,9 +440,13 @@ test('trailing-style binop and pipe breaks are preserved', () => {
 test('trailing break suppresses the leading overflow break at the same operator', () => {
   // 尾随风格已折行的运算符不抢断：不把折行挪到运算符之前；源码
   // 未折行且超宽的运算符仍做行首补断
-  const src = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\n  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb or c'
+  const src =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\n  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb or c'
   const once = fmt(src, 60)
-  assert.equal(once, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nor c\n')
+  assert.equal(
+    once,
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa or\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nor c\n'
+  )
   assert.equal(fmt(once, 60), once)
 })
 

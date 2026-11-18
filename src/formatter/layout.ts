@@ -12,7 +12,14 @@ import { breakAfter, breakBefore } from './breakkind'
 import { LineBuilder, trimLineEnd } from './emit'
 import { Measure } from './measure'
 import { Predict } from './predict'
-import { CLAUSE_KEYWORDS, CLOSERS, OPENERS, gapBetween, padsInsideBracket, type FmtToken } from './spacing'
+import {
+  CLAUSE_KEYWORDS,
+  CLOSERS,
+  OPENERS,
+  gapBetween,
+  padsInsideBracket,
+  type FmtToken
+} from './spacing'
 import { TokenStream, endCol, endLine, newlinesBetween } from './tokens'
 
 /**
@@ -233,12 +240,7 @@ export class Layout {
   #isCallLike(i: number): boolean {
     const t = this.#tokens[i]
     const p = this.#tokens[i - 1]
-    return (
-      p !== undefined &&
-      p.type === 'ident' &&
-      p.line === t.line &&
-      endCol(p) === t.col
-    )
+    return p !== undefined && p.type === 'ident' && p.line === t.line && endCol(p) === t.col
   }
 
   /** 其后跟随操作数表达式的前缀关键字 */
@@ -267,8 +269,7 @@ export class Layout {
           p.text === ':' ||
           p.text === '|' ||
           p.text === '?//')) ||
-      (p.type === 'keyword' &&
-        (CLAUSE_KEYWORDS.has(p.text) || Layout.#PREFIX_KEYWORDS.has(p.text)))
+      (p.type === 'keyword' && (CLAUSE_KEYWORDS.has(p.text) || Layout.#PREFIX_KEYWORDS.has(p.text)))
     ) {
       this.#operandStarts[this.#operandStarts.length - 1] = this.#out.indentCols
     }
@@ -332,25 +333,26 @@ export class Layout {
       const innerGroup = this.#groups[this.#groups.length - 1]
       const p = this.#prevReal
       let indent: number
-      if (p !== undefined && this.#prevRealLead && breakAfter(this.#st, this.#prevRealIdx) === 'afterBinop') {
+      if (
+        p !== undefined &&
+        this.#prevRealLead &&
+        breakAfter(this.#st, this.#prevRealIdx) === 'afterBinop'
+      ) {
         // 独占一行的运算符与其换行操作数之间的注释：与操作数同缩进
         //（基础缩进取运算符自身的发射起始列，连续注释不逐级抬高）
         const base =
           p.text === '|'
-            ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
-            : this.#hangingChainAlign(innerGroup) ??
+            ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
+            : (this.#hangingChainAlign(innerGroup) ??
               this.#emitStart[this.#prevRealIdx] ??
-              this.#out.indentCols
+              this.#out.indentCols)
         indent = base + this.#opts.indentSize
       } else if (this.#nextIsClauseKeyword(i)) {
         // 下一行是子句关键字（elif/else/end/catch/then）：注释与关键
         // 字所在列对齐，而不是分支内容缩进
         const kw = this.#tokens[this.#nextRealIdxAfter(i)]
         indent = this.#findClauseIndent(kw.text === 'catch' ? 'try' : 'if') ?? this.#ctxIndent
-      } else if (
-        this.#bodyIndent !== null &&
-        this.#bodyIndent.depth === this.#groups.length
-      ) {
+      } else if (this.#bodyIndent !== null && this.#bodyIndent.depth === this.#groups.length) {
         indent = this.#bodyIndent.indent
       } else {
         indent = this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent
@@ -421,12 +423,7 @@ export class Layout {
         // 前导分隔符：悬挂组里源码在 ','/';' 之前换行时，分隔符提到
         // 行首，与开括号同列对齐（与前导双目运算符同一种风格，
         // jq 源码里常见）
-        if (
-          innerGroup !== undefined &&
-          innerGroup.expanded &&
-          innerGroup.hanging &&
-          nl > 0
-        ) {
+        if (innerGroup !== undefined && innerGroup.expanded && innerGroup.hanging && nl > 0) {
           indent = innerGroup.alignCol
         }
         break
@@ -492,7 +489,8 @@ export class Layout {
             // 层级 —— 值比键表达式的起始列深一层。键前常有 '{ ' 或
             // ', ' 前缀（开括号/分隔符中置），键的起始列比组内容层
             // 深一级，按内容层算会让值与键同列
-            indent = (this.#keyStartCol(this.#prevRealIdx) ?? this.#ctxIndent) + this.#opts.indentSize
+            indent =
+              (this.#keyStartCol(this.#prevRealIdx) ?? this.#ctxIndent) + this.#opts.indentSize
           }
           break
         case 'afterOpener': {
@@ -516,12 +514,12 @@ export class Layout {
           // 独立注释会成为「当前行」，用 out.indentCols 会逐级抬高
           if (nl > 0) {
             const opBase = this.#prevRealLead
-              ? this.#emitStart[this.#prevRealIdx] ?? this.#out.indentCols
+              ? (this.#emitStart[this.#prevRealIdx] ?? this.#out.indentCols)
               : this.#out.indentCols
             const base =
               p.text === '|'
-                ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
-                : this.#hangingChainAlign(innerGroup) ?? opBase
+                ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
+                : (this.#hangingChainAlign(innerGroup) ?? opBase)
             indent = this.#prevRealLead ? base + this.#opts.indentSize : base
           }
           break
@@ -534,7 +532,7 @@ export class Layout {
       // 对齐开括号）
       indent =
         this.#prevReal && this.#prevReal.type === 'operator' && this.#prevReal.text === '|'
-          ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
+          ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
           : this.#ctxIndent
     }
 

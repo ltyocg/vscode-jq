@@ -50,9 +50,7 @@ const BINOP_SET = new Set<string>(BINOPS)
  * 可作行首断点的双目运算符：源码换行处保留、超宽时以行首运算符
  * 折行。'|' 另有行首管道规则，'?//' 是解构语法，均不在其中。
  */
-export const LINE_BREAK_BINOPS = new Set<string>(
-  BINOPS.filter((op) => op !== '|' && op !== '?//')
-)
+export const LINE_BREAK_BINOPS = new Set<string>(BINOPS.filter((op) => op !== '|' && op !== '?//'))
 
 /**
  * 格式化器内部的 token：在 tokenizer 的纯词法信息之上，额外标注了
@@ -194,7 +192,11 @@ export function gapBetween(prev: FmtToken, next: FmtToken, enclosing: string): '
     ) {
       return 'none'
     }
-    if (next.type === 'keyword' && prev.line === next.line && prev.col + prev.text.length === next.col) {
+    if (
+      next.type === 'keyword' &&
+      prev.line === next.line &&
+      prev.col + prev.text.length === next.col
+    ) {
       return 'none'
     }
     return 'space'

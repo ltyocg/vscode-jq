@@ -8,7 +8,14 @@
  */
 import { breakBefore } from './breakkind'
 import type { FormatOptions } from './api'
-import { CLOSERS, OPENERS, gapBetween, padsInsideBracket, type BracketStyle, type FmtToken } from './spacing'
+import {
+  CLOSERS,
+  OPENERS,
+  gapBetween,
+  padsInsideBracket,
+  type BracketStyle,
+  type FmtToken
+} from './spacing'
 import { MAX_SEGMENT_LOOKAHEAD, TokenStream, endLine, newlinesBetween } from './tokens'
 
 /**
