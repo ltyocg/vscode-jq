@@ -61,8 +61,8 @@ export class Predict {
       // 源码单行：放得下就单行，放不下走分隔式
       const flat = this.#m.flatSpan(i + 1, close, this.#st.tokens[i].text)
       if (flat === null) return { expanded: true, hanging: false, leadSep }
-      // 内侧补位空格（只有大括号组补）+ 闭括号
-      const extra = this.#st.tokens[i].text === '{' ? 3 : 1
+      // 单行组不补内侧空格（各种括号一致），extra 只是闭括号
+      const extra = 1
       return {
         expanded: this.#col() + flat.length + extra > this.#opts.printWidth,
         hanging: false,
@@ -72,10 +72,10 @@ export class Predict {
     // 源码多行或含注释。但组内未必真的会断行：换行可能全落在会折叠
     // 的位置（表达式中间、前导逗号之前……）。会断行的才展开。
     if (!this.groupBreaks(i, close)) {
-      // 意图是单行：放得下就按单行处理（内侧补空格）
+      // 意图是单行：放得下就按单行处理
       const flat = this.#m.flatSpan(i + 1, close, this.#st.tokens[i].text)
-      // 此分支内不会有注释，flat 不会为 null
-      const extra = this.#st.tokens[i].text === '{' ? 3 : 1
+      // 此分支内不会有注释，flat 不会为 null；单行不补内侧空格
+      const extra = 1
       if (flat !== null && this.#col() + flat.length + extra <= this.#opts.printWidth) {
         return { expanded: false, hanging: false, leadSep }
       }

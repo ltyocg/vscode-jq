@@ -24,7 +24,7 @@ test('field access and indexing stay tight', () => {
 })
 
 test('unary minus', () => {
-  assert.equal(fmt('{a: -1}'), '{ a: -1 }\n')
+  assert.equal(fmt('{a: -1}'), '{a: -1}\n')
   assert.equal(fmt('[-1, -2]'), '[-1, -2]\n')
   assert.equal(fmt('f(-1)'), 'f(-1)\n')
   assert.equal(fmt('1 - 2'), '1 - 2\n')
@@ -123,12 +123,12 @@ test('reduce / foreach / label / break', () => {
     fmt('label $out | .[] | if . then . else break $out end'),
     'label $out | .[] | if . then . else break $out end\n'
   )
-  assert.equal(fmt('. as [$a] ?// {$b} | $a'), '. as [$a] ?// { $b } | $a\n')
+  assert.equal(fmt('. as [$a] ?// {$b} | $a'), '. as [$a] ?// {$b} | $a\n')
 })
 
 test('object construction', () => {
-  assert.equal(fmt('{a: 1, "b": 2, $c}'), '{ a: 1, "b": 2, $c }\n')
-  assert.equal(fmt('{if: 1, end: 2}'), '{ if: 1, end: 2 }\n')
+  assert.equal(fmt('{a: 1, "b": 2, $c}'), '{a: 1, "b": 2, $c}\n')
+  assert.equal(fmt('{if: 1, end: 2}'), '{if: 1, end: 2}\n')
   const src = '{\n  "a": 1,\n  "b": 2\n}'
   assert.equal(fmt(src), src + '\n')
   // 注释迫使展开；开括号后接了内容 → 悬挂式，保留源码换行
@@ -140,10 +140,10 @@ test('keyword-named object keys do not trigger clause logic', () => {
   // 上下文、不得被当作定义
   assert.equal(
     fmt('{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}'),
-    '{ if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7 }\n'
+    '{if: 1, then: 2, else: 3, end: 4, catch: 5, try: 6, def: 7}\n'
   )
   // 对象键不得捕获或弹掉真实 if 的子句缩进
-  const src = 'if .a\nthen { if: 1, end: 2 }\nelse .b\nend'
+  const src = 'if .a\nthen {if: 1, end: 2}\nelse .b\nend'
   assert.equal(fmt(src), src + '\n')
   // jqjq 的形态：括号组内的关键字键(此前逗号从前导挪到尾导时
   // 反复格式化结果不稳定)
@@ -164,7 +164,7 @@ test('keyword-named object keys do not trigger clause logic', () => {
 test('import / include / module', () => {
   assert.equal(
     fmt('module {name: "x"}; import "a" as b; include "c"; .'),
-    'module { name: "x" };\nimport "a" as b;\ninclude "c";\n.\n'
+    'module {name: "x"};\nimport "a" as b;\ninclude "c";\n.\n'
   )
 })
 
@@ -226,13 +226,13 @@ test('hanging groups: opener followed by content keeps source breaks', () => {
   assert.equal(fmt('[1,\n# note\n2]'), '[ 1,\n  # note\n  2 ]\n')
 })
 
-test('single-line object literals pad one space inside braces', () => {
-  // 只有大括号：内侧恰好一个空格
-  assert.equal(fmt('{a: 1}'), '{ a: 1 }\n')
-  assert.equal(fmt('{  a: 1  }'), '{ a: 1 }\n') // 不能多
-  assert.equal(fmt('{a:1}'), '{ a: 1 }\n') // 不能少
-  // 嵌套大括号各自补
-  assert.equal(fmt('{a: {b: 1}}'), '{ a: { b: 1 } }\n')
+test('single-line object literals do not pad inside braces', () => {
+  // 各种括号一致：单行组内侧不补（悬挂式展开组才补，见下面的用例）
+  assert.equal(fmt('{a: 1}'), '{a: 1}\n')
+  assert.equal(fmt('{  a: 1  }'), '{a: 1}\n') // 不能多
+  assert.equal(fmt('{a:1}'), '{a: 1}\n') // 冒号后空格仍在
+  // 嵌套大括号同样不补
+  assert.equal(fmt('{a: {b: 1}}'), '{a: {b: 1}}\n')
   // 其余括号一律不补
   assert.equal(fmt('[1, 2, 3]'), '[1, 2, 3]\n')
   assert.equal(fmt('map( .a )'), 'map(.a)\n')
@@ -277,7 +277,7 @@ test('comment backslash continuation (jq 1.8 spec)', () => {
 test('leading-dot number literals', () => {
   assert.equal(fmt('.5+.5e2'), '.5 + .5e2\n')
   assert.equal(fmt('[.5, .25]'), '[.5, .25]\n')
-  assert.equal(fmt('{a: .5}'), '{ a: .5 }\n')
+  assert.equal(fmt('{a: .5}'), '{a: .5}\n')
   assert.equal(fmt('-.5'), '-.5\n')
   // 点访问仍然是点访问
   assert.equal(fmt('.a[0] | .[]'), '.a[0] | .[]\n')

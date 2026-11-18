@@ -24,8 +24,8 @@ eval "$( \
 #   a string that is parts of string interpolation.
 #
 
-def _internal_error($v): { __jqjq_error: $v } | error;
-def _internal_break($v): { __jqjq_break: $v } | error;
+def _internal_error($v): {__jqjq_error: $v} | error;
+def _internal_break($v): {__jqjq_break: $v} | error;
 def _is_internal_error: type == "object" and has("__jqjq_error");
 def _is_internal_break: type == "object" and has("__jqjq_break");
 def _unwrap_internal_error: .__jqjq_error;
@@ -100,7 +100,7 @@ def lex:
 
   def _token:
     def _if_match_then(matches; f):
-      ( . as { $remain, $string_stack }
+      ( . as {$remain, $string_stack}
       | $remain
       | matches
       | f as $token
@@ -117,19 +117,19 @@ def lex:
     def _const($s; f): _if_match_then(if startswith($s) then $s else empty end; f);
     if .remain == "" then empty
     else
-      ( . as { $string_stack }
-      | _re("^\\s+"; { whitespace: . })
-      // _re("^#(\\\\\n|[^\n])*"; { comment: . })
-      // _re("^\\.[_a-zA-Z][_a-zA-Z0-9]*"; { index: .[1:] })
-      // _re("^@[_a-zA-Z][_a-zA-Z0-9]*"; { at_ident: . })
-      // _re("^[_a-zA-Z][_a-zA-Z0-9]*"; { ident: . })
-      // _re("^\\$[_a-zA-Z][_a-zA-Z0-9]*"; { binding: . })
+      ( . as {$string_stack}
+      | _re("^\\s+"; {whitespace: .})
+      // _re("^#(\\\\\n|[^\n])*"; {comment: .})
+      // _re("^\\.[_a-zA-Z][_a-zA-Z0-9]*"; {index: .[1:]})
+      // _re("^@[_a-zA-Z][_a-zA-Z0-9]*"; {at_ident: .})
+      // _re("^[_a-zA-Z][_a-zA-Z0-9]*"; {ident: .})
+      // _re("^\\$[_a-zA-Z][_a-zA-Z0-9]*"; {binding: .})
         # 1.23, .123, 123e2, 1.23e2, 123E2, 1.23e+2, 1.23E-2 or 123
-      // _re("^(?:[0-9]+\\.[0-9]+|[0-9]+)(?:[eE][-\\+]?[0-9]+)?"; { number: . })
+      // _re("^(?:[0-9]+\\.[0-9]+|[0-9]+)(?:[eE][-\\+]?[0-9]+)?"; {number: .})
       // _re( "^\"(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
         ( .[1:-2]
         | _unescape
-        | { string_start: ., string_stack: ($string_stack + ["\\("]) }
+        | {string_start: ., string_stack: ($string_stack + ["\\("])}
         )
       )
       //
@@ -138,7 +138,7 @@ def lex:
         | _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
           ( .[1:-2]
           | _unescape
-          | { string_middle: . }
+          | {string_middle: .}
           )
         )
         // _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\"";
@@ -149,39 +149,39 @@ def lex:
         )
         )
         # match " <any non-"-or-\> or <\ + any> "
-      // _re("^\"(?:[^\"\\\\]|\\\\.)*?\""; .[1:-1] | _unescape | { string: . })
-      // _const("=="; { equal_equal: . })
-      // _const("|="; { pipe_equal: . })
-      // _const("="; { equal: . })
-      // _const("!="; { not_equal: . })
-      // _const("<="; { less_equal: . })
-      // _const(">="; { greater_equal: . })
-      // _const("+="; { equal_plus: . })
-      // _const("-="; { equal_dash: . })
-      // _const("*="; { equal_star: . })
-      // _const("/="; { equal_slash: . })
-      // _const("%="; { equal_percent: . })
-      // _const("<"; { less: . })
-      // _const(">"; { greater: . })
-      // _const(":"; { colon: . })
-      // _const(";"; { semicolon: . })
-      // _const("|"; { pipe: . })
-      // _const(","; { comma: . })
-      // _const("+"; { plus: . })
-      // _const("-"; { dash: . })
-      // _const("*"; { star: . })
-      // _const("//"; { slash_slash: . })
-      // _const("/"; { slash: . })
-      // _const("%"; { percent: . })
-      // _const("("; { lparen: ., string_stack: ($string_stack + ["("]) })
-      // _const(")"; { rparen: ., string_stack: ($string_stack[0:-1]) })
-      // _const("["; { lsquare: . })
-      // _const("]"; { rsquare: . })
-      // _const("{"; { lcurly: . })
-      // _const("}"; { rcurly: . })
-      // _const(".."; { dotdot: . })
-      // _const("."; { dot: . })
-      // _const("?"; { qmark: . })
+      // _re("^\"(?:[^\"\\\\]|\\\\.)*?\""; .[1:-1] | _unescape | {string: .})
+      // _const("=="; {equal_equal: .})
+      // _const("|="; {pipe_equal: .})
+      // _const("="; {equal: .})
+      // _const("!="; {not_equal: .})
+      // _const("<="; {less_equal: .})
+      // _const(">="; {greater_equal: .})
+      // _const("+="; {equal_plus: .})
+      // _const("-="; {equal_dash: .})
+      // _const("*="; {equal_star: .})
+      // _const("/="; {equal_slash: .})
+      // _const("%="; {equal_percent: .})
+      // _const("<"; {less: .})
+      // _const(">"; {greater: .})
+      // _const(":"; {colon: .})
+      // _const(";"; {semicolon: .})
+      // _const("|"; {pipe: .})
+      // _const(","; {comma: .})
+      // _const("+"; {plus: .})
+      // _const("-"; {dash: .})
+      // _const("*"; {star: .})
+      // _const("//"; {slash_slash: .})
+      // _const("/"; {slash: .})
+      // _const("%"; {percent: .})
+      // _const("("; {lparen: ., string_stack: ($string_stack + ["("])})
+      // _const(")"; {rparen: ., string_stack: ($string_stack[0:-1])})
+      // _const("["; {lsquare: .})
+      // _const("]"; {rsquare: .})
+      // _const("{"; {lcurly: .})
+      // _const("}"; {rcurly: .})
+      // _const(".."; {dotdot: .})
+      // _const("."; {dot: .})
+      // _const("?"; {qmark: .})
       // error("unknown token: '\(.remain[0:100])'")
       )
     end;
@@ -228,30 +228,30 @@ def parse:
     def _op_prec_climb($p; filter):
       def _ops:
         if filter then null
-        elif .pipe then { prec: 0, name: "|", assoc: "right" }
+        elif .pipe then {prec: 0, name: "|", assoc: "right"}
           # TODO: understand why jq has left associativity for "," but right seems to give correct parse tree
-        elif .comma then { prec: 1, name: ",", assoc: "right" }
-        elif .slash_slash then { prec: 2, name: "//", assoc: "right" }
-        elif .equal then { prec: 3, name: "=", assoc: "none" }
-        elif .pipe_equal then { prec: 3, name: "|=", assoc: "none" }
-        elif .equal_plus then { prec: 3, name: "+=", assoc: "none" }
-        elif .equal_dash then { prec: 3, name: "-=", assoc: "none" }
-        elif .equal_star then { prec: 3, name: "*=", assoc: "none" }
-        elif .equal_slash then { prec: 3, name: "/=", assoc: "none" }
-        elif .equal_percent then { prec: 3, name: "%=", assoc: "none" }
-        elif .ident == "or" then { prec: 4, name: "or", assoc: "left" }
-        elif .ident == "and" then { prec: 5, name: "and", assoc: "left" }
-        elif .equal_equal then { prec: 6, name: "==", assoc: "none" }
-        elif .not_equal then { prec: 6, name: "!=", assoc: "none" }
-        elif .less then { prec: 6, name: "<", assoc: "none" }
-        elif .less_equal then { prec: 6, name: "<=", assoc: "none" }
-        elif .greater then { prec: 6, name: ">", assoc: "none" }
-        elif .greater_equal then { prec: 6, name: ">=", assoc: "none" }
-        elif .plus then { prec: 7, name: "+", assoc: "left" }
-        elif .dash then { prec: 7, name: "-", assoc: "left" }
-        elif .star then { prec: 8, name: "*", assoc: "left" }
-        elif .slash then { prec: 8, name: "/", assoc: "left" }
-        elif .percent then { prec: 8, name: "%", assoc: "left" }
+        elif .comma then {prec: 1, name: ",", assoc: "right"}
+        elif .slash_slash then {prec: 2, name: "//", assoc: "right"}
+        elif .equal then {prec: 3, name: "=", assoc: "none"}
+        elif .pipe_equal then {prec: 3, name: "|=", assoc: "none"}
+        elif .equal_plus then {prec: 3, name: "+=", assoc: "none"}
+        elif .equal_dash then {prec: 3, name: "-=", assoc: "none"}
+        elif .equal_star then {prec: 3, name: "*=", assoc: "none"}
+        elif .equal_slash then {prec: 3, name: "/=", assoc: "none"}
+        elif .equal_percent then {prec: 3, name: "%=", assoc: "none"}
+        elif .ident == "or" then {prec: 4, name: "or", assoc: "left"}
+        elif .ident == "and" then {prec: 5, name: "and", assoc: "left"}
+        elif .equal_equal then {prec: 6, name: "==", assoc: "none"}
+        elif .not_equal then {prec: 6, name: "!=", assoc: "none"}
+        elif .less then {prec: 6, name: "<", assoc: "none"}
+        elif .less_equal then {prec: 6, name: "<=", assoc: "none"}
+        elif .greater then {prec: 6, name: ">", assoc: "none"}
+        elif .greater_equal then {prec: 6, name: ">=", assoc: "none"}
+        elif .plus then {prec: 7, name: "+", assoc: "left"}
+        elif .dash then {prec: 7, name: "-", assoc: "left"}
+        elif .star then {prec: 8, name: "*", assoc: "left"}
+        elif .slash then {prec: 8, name: "/", assoc: "left"}
+        elif .percent then {prec: 8, name: "%", assoc: "left"}
         else null
         end;
 
@@ -277,7 +277,7 @@ def parse:
                 # if functions was defined for the left side they should be
                 # move to the op itself to also be available on the right side
                 # ex: def f: 123; 1 + f
-              | $t as { $func_defs }
+              | $t as {$func_defs}
               | _f(
                 ( { op: $next_op.name
                   , left: ($t | del(.func_defs))
@@ -338,7 +338,7 @@ def parse:
           (
             # {a} -> {a: .a}
             # {a: ...} -> {a: ...}
-            ( _consume(.ident) as [$rest, { $ident }]
+            ( _consume(.ident) as [$rest, {$ident}]
             | $rest
             | _optional(_colon_val) as [$rest, $val]
             | $rest
@@ -357,16 +357,16 @@ def parse:
               | $rest
               | [ .
                 , { key_string:
-                    { str: $string.term.str }
+                    {str: $string.term.str}
                   , val: $val
                   }
                 ]
               )
               //
             # {$a} -> {a: $a}
-              ( _consume(.binding) as [$rest, { $binding }]
+              ( _consume(.binding) as [$rest, {$binding}]
               | [ $rest
-                , { key: $binding }
+                , {key: $binding}
                 ]
               )
               //
@@ -403,7 +403,7 @@ def parse:
         , { term:
             { type: "TermTypeObject"
             , object:
-                { key_vals: $key_vals }
+                {key_vals: $key_vals}
             }
           }
         ]
@@ -431,7 +431,7 @@ def parse:
             (
               # {a} -> {a: .a}
               # {a: ...} -> {a: ...}
-              ( _consume(.ident) as [$rest, { $ident }]
+              ( _consume(.ident) as [$rest, {$ident}]
               | $rest
               | _optional(_colon_pattern) as [$rest, $val]
               | $rest
@@ -450,16 +450,16 @@ def parse:
                 | $rest
                 | [ .
                   , { key_string:
-                      { str: $string.term.str }
+                      {str: $string.term.str}
                     , val: $val
                     }
                   ]
                 )
                 //
               # {$a} -> {a: $a}
-                ( _consume(.binding) as [$rest, { $binding }]
+                ( _consume(.binding) as [$rest, {$binding}]
                 | [ $rest
-                  , { key: $binding }
+                  , {key: $binding}
                   ]
                 )
                 //
@@ -493,7 +493,7 @@ def parse:
         | $rest
         | _consume(.rcurly) as [$rest, $_]
         | [ $rest
-          , { object: $key_patterns }
+          , {object: $key_patterns}
           ]
         )
       //
@@ -514,13 +514,13 @@ def parse:
         | $rest
         | _consume(.rsquare) as [$rest, $_]
         | [ $rest
-          , { array: $pattern }
+          , {array: $pattern}
           ]
         )
       //
-        ( _consume(.binding) as [$rest, { $binding }]
+        ( _consume(.binding) as [$rest, {$binding}]
         | [ $rest
-          , { name: $binding }
+          , {name: $binding}
           ]
         )
       );
@@ -543,7 +543,7 @@ def parse:
     # ident
     # ident(<query>[;...])
     def _func:
-      ( _consume(.ident) as [$rest, { $ident }]
+      ( _consume(.ident) as [$rest, {$ident}]
       | $rest
       | ( _consume(.lparen)[0]
         | _repeat(
@@ -576,7 +576,7 @@ def parse:
         , { term:
             { type: "TermTypeFunc"
             , func:
-                { name: $ident }
+                {name: $ident}
             }
           }
         ]
@@ -584,12 +584,12 @@ def parse:
 
     # $name
     def _binding:
-      ( _consume(.binding) as [$rest, { $binding }]
+      ( _consume(.binding) as [$rest, {$binding}]
       | [ $rest
         , { term:
             { type: "TermTypeFunc"
             , func:
-                { name: $binding }
+                {name: $binding}
             }
           }
         ]
@@ -605,7 +605,7 @@ def parse:
         , { term:
             { type: "TermTypeArray"
             , array:
-                { query: $query }
+                {query: $query}
             }
           }
         ]
@@ -742,11 +742,11 @@ def parse:
         | $rest
         | ( ( _consume(.lparen)[0]
             | _repeat(
-              ( ( ( _consume(.ident) as [$rest, { $ident }]
+              ( ( ( _consume(.ident) as [$rest, {$ident}]
                   | [$rest, $ident]
                   )
                 //
-                  ( _consume(.binding) as [$rest, { $binding }]
+                  ( _consume(.binding) as [$rest, {$binding}]
                   | [$rest, $binding]
                   )
                 ) as [$rest, $arg]
@@ -805,7 +805,7 @@ def parse:
         | $rest
         | _consume(.lsquare)[0]
         | _consume(.rsquare) as [$rest, $_]
-        | [$rest, { iter: true }]
+        | [$rest, {iter: true}]
         )
         //
         # [...] query
@@ -822,7 +822,7 @@ def parse:
           | _consume(.rsquare) as [$rest, $_]
           | [ $rest
             , { index:
-                { start: $start }
+                {start: $start}
               }
             ]
           )
@@ -841,7 +841,7 @@ def parse:
           | if $start == null and $end_ == null then empty end
           | [ .
             , { index:
-                ( { is_slice: true }
+                ( {is_slice: true}
                 | if $start then .start = $start else . end
                 | if $end_ then . end = $end_ else . end
                 )
@@ -850,10 +850,10 @@ def parse:
           )
           //
         # .name index
-          ( _consume(.index) as [$rest, { $index }]
+          ( _consume(.index) as [$rest, {$index}]
           | [ $rest
             , { index:
-                { name: $index }
+                {name: $index}
               }
             ]
           )
@@ -865,7 +865,7 @@ def parse:
           | [ .
             , { index:
                 { str:
-                    { str: $string.term.str }
+                    {str: $string.term.str}
                 }
               }
             ]
@@ -874,7 +874,7 @@ def parse:
         # ? optional (try)
           ( _consume(.qmark) as [$rest, $_]
           | [ $rest
-            , { optional: true }
+            , {optional: true}
             ]
           )
           //
@@ -899,7 +899,7 @@ def parse:
       ( _consume(.dot) as [$rest, $_]
       | [ $rest
         , { term:
-            { type: "TermTypeIdentity" }
+            {type: "TermTypeIdentity"}
           }
         ]
       );
@@ -919,7 +919,7 @@ def parse:
           , { term:
               { type: "TermTypeIndex"
               , index:
-                  { start: $query }
+                  {start: $query}
               }
             }
           ]
@@ -939,7 +939,7 @@ def parse:
           , { term:
               { type: "TermTypeIndex"
               , index:
-                  ( { is_slice: true }
+                  ( {is_slice: true}
                   | if $start then .start = $start else . end
                   | if $end_ then . end = $end_ else . end
                   )
@@ -948,12 +948,12 @@ def parse:
           ]
         )
       //
-        ( _consume(.index) as [$rest, { $index }]
+        ( _consume(.index) as [$rest, {$index}]
         | [ $rest
           , { term:
               { type: "TermTypeIndex"
               , index:
-                  { name: $index }
+                  {name: $index}
               }
             }
           ]
@@ -968,7 +968,7 @@ def parse:
               { type: "TermTypeIndex"
               , index:
                   { str:
-                      { str: $string.term.str }
+                      {str: $string.term.str}
                   }
               }
             }
@@ -978,31 +978,31 @@ def parse:
 
     # "abc"
     def _string_simple:
-      _scalar("TermTypeString"; .string; { str: .string });
+      _scalar("TermTypeString"; .string; {str: .string});
 
     # "abc \(123)"
     def _string_query:
-      ( _consume(.string_start) as [$rest, { $string_start }]
+      ( _consume(.string_start) as [$rest, {$string_start}]
       | $rest
       | _repeat(
         ( select(length > 0) # make sure there is something
         | _p("query")
-        // _scalar("TermTypeString"; .string_middle; { str: .string_middle })
+        // _scalar("TermTypeString"; .string_middle; {str: .string_middle})
         )
       ) as [$rest, $queries]
       | $rest
-      | _consume(.string_end) as [$rest, { $string_end }]
+      | _consume(.string_end) as [$rest, {$string_end}]
       | [ $rest
         , { term:
             { type: "TermTypeString"
             , queries:
-                [ { term: { str: $string_start, type: "TermTypeString" } }
+                [ {term: {str: $string_start, type: "TermTypeString"}}
                 , ( $queries[]
                   | if .term and .term.type == "TermTypeString" then .
-                  else { term: { query: ., type: "TermTypeQuery" } }
+                  else {term: {query: ., type: "TermTypeQuery"}}
                   end
                   )
-                , { term: { str: $string_end, type: "TermTypeString" } }
+                , {term: {str: $string_end, type: "TermTypeString"}}
                 ]
             }
           }
@@ -1016,7 +1016,7 @@ def parse:
 
     # @format "abc"
     def _format_string:
-      ( _consume(.at_ident) as [$rest, { $at_ident }]
+      ( _consume(.at_ident) as [$rest, {$at_ident}]
       | $rest
       | _string as [$rest, $string]
       | [ $rest
@@ -1046,7 +1046,7 @@ def parse:
         , { term:
             { type: "TermTypeTry"
             , try:
-                ( { body: $body }
+                ( {body: $body}
                 | if $catch_ then . catch = $catch_ else . end
                 )
             }
@@ -1057,7 +1057,7 @@ def parse:
     # label <binding> | ...
     def _label:
       ( _keyword("label")
-      | _consume(.binding) as [$rest, { $binding }]
+      | _consume(.binding) as [$rest, {$binding}]
       | $rest
       | _consume(.pipe)[0]
       | _p("query") as [$rest, $body]
@@ -1077,7 +1077,7 @@ def parse:
     # break <binding>
     def _break:
       ( _keyword("break")
-      | _consume(.binding) as [$rest, { $binding }]
+      | _consume(.binding) as [$rest, {$binding}]
       | $rest
       | [ .
         , { term:
@@ -1113,7 +1113,7 @@ def parse:
         , { term:
             { type: "TermTypeFunc"
             , func:
-                { name: "recurse" }
+                {name: "recurse"}
             }
           }
         ]
@@ -1181,7 +1181,7 @@ def parse:
     elif $type == "true" then _scalar("TermTypeTrue"; .ident == "true"; .)
     elif $type == "false" then _scalar("TermTypeFalse"; .ident == "false"; .)
     elif $type == "null" then _scalar("TermTypeNull"; .ident == "null"; .)
-    elif $type == "number" then _scalar("TermTypeNumber"; .number; { number: .number })
+    elif $type == "number" then _scalar("TermTypeNumber"; .number; {number: .number})
     elif $type == "string" then _string
     elif $type == "format_string" then _format_string
     elif $type == "index" then _index
@@ -1281,7 +1281,7 @@ def _tojson_stream($opts):
       );
     _f($newline)
   );
-def _tojson: [_tojson_stream({ indent: 0 })] | join("");
+def _tojson: [_tojson_stream({indent: 0})] | join("");
 
 def dump($opts):
   ( if $opts.raw_output and type == "string" then
@@ -1350,7 +1350,7 @@ def eval_ast($query; $path; $env; undefined_func):
     ( . # debug({c: ., $query, $path, $env})
     | $query as { term:
         { type: $type
-        , suffix_list: [{ $optional }]
+        , suffix_list: [{$optional}]
         }
                 , $op
                 , $func_defs
@@ -1418,7 +1418,7 @@ def eval_ast($query; $path; $env; undefined_func):
                     ( _e(
                       { term:
                           { type: "TermTypeFunc"
-                          , func: { name: $format_func }
+                          , func: {name: $format_func}
                           }
                       };
                       [];
@@ -1457,9 +1457,9 @@ def eval_ast($query; $path; $env; undefined_func):
             if length == 0 then $env
             else
               if .name then
-                ( . as { $name }
+                ( . as {$name}
                 | $env
-                | .[$name] = { value: $input }
+                | .[$name] = {value: $input}
                 )
               elif .array then
                 reduce (.array | to_entries)[] as $kv (
@@ -1473,7 +1473,7 @@ def eval_ast($query; $path; $env; undefined_func):
                 reduce .object[] as $kv (
                   $env;
                   ( . as $env
-                  | ( if $kv.key and ($kv.val | not) then [$kv.key[1:], { name: $kv.key }]
+                  | ( if $kv.key and ($kv.val | not) then [$kv.key[1:], {name: $kv.key}]
                   elif $kv.key then [$kv.key, $kv.val]
                   elif $kv.key_string then [$kv.key_string.str, $kv.val]
                   elif $kv.key_query then
@@ -1538,7 +1538,7 @@ def eval_ast($query; $path; $env; undefined_func):
             error("fromjson only supports constant literals");
 
         ( . as $input
-        | $query.term.func as { $name, $args }
+        | $query.term.func as {$name, $args}
         | func_name($name; $args) as $name
         | $query_env[$name] as $e
         | if $e | has("value") then [[null], $e.value]
@@ -1565,7 +1565,7 @@ def eval_ast($query; $path; $env; undefined_func):
               # if not lambda inject the function in it's own env to allow recursion
               # TODO: find a better way
             | ( if $e.lambda then {}
-            else { ($name): $e }
+            else {($name): $e}
             end
               ) as $self_env
             | $func_args
@@ -1586,7 +1586,7 @@ def eval_ast($query; $path; $env; undefined_func):
                   | $input
                   | _e($ast; []; $query_env; $label_count) as [$_, $v]
                   | $rest
-                  | _f($env | .[$name] = { value: $v })
+                  | _f($env | .[$name] = {value: $v})
                   )
                 end;
               _f({}) as $bindings_env
@@ -1756,13 +1756,13 @@ def eval_ast($query; $path; $env; undefined_func):
                     | if startswith("$") then
                         { term:
                             { type: "TermTypeFunc"
-                            , func: { name: . }
+                            , func: {name: .}
                             }
                         }
                     else
                         { term:
                             { type: "TermTypeIndex"
-                            , index: { name: . }
+                            , index: {name: .}
                             }
                         }
                     end
@@ -1823,7 +1823,7 @@ def eval_ast($query; $path; $env; undefined_func):
       # <cond> evaluate <then> and for each falseness output evaluate next pair.
       def _if:
         ( . as $input
-        | $query.term as { if: $if_ }
+        | $query.term as {if: $if_}
         | [ # if <cond> then <then> ...
           [ $if_.cond
           , $if_. then
@@ -1834,13 +1834,13 @@ def eval_ast($query; $path; $env; undefined_func):
             )
           , if $if_. else then
             # else <then> end -> else true then <then> end
-            [ { term: { type: "TermTypeTrue" } }
+            [ {term: {type: "TermTypeTrue"}}
             , $if_. else
             ]
           else
             # end -> else true then . end
-            [ { term: { type: "TermTypeTrue" } }
-            , { term: { type: "TermTypeIdentity" } }
+            [ {term: {type: "TermTypeTrue"}}
+            , {term: {type: "TermTypeIdentity"}}
             ]
           end
           ]
@@ -1865,16 +1865,16 @@ def eval_ast($query; $path; $env; undefined_func):
         # TODO: possible to do with function instead of reduce?
         # TODO: path(reduce) behavior
         ( $query.term. reduce as { $term
-                                 , pattern: { name: $name }
+                                 , pattern: {name: $name}
                                  , start: $start
                                  , update: $update
                                  }
         | _e($start; $path; $query_env; $label_count) as [$start_path, $start_v]
-        | reduce _e({ term: $term }; $start_path; $query_env; $label_count) as [$p, $v] (
+        | reduce _e({term: $term}; $start_path; $query_env; $label_count) as [$p, $v] (
           [$start_path, $start_v];
           ( . as [$p, $state]
           | $state
-          | _e($update; $p; $query_env + { ($name): { value: $v } }; $label_count)
+          | _e($update; $p; $query_env + {($name): {value: $v}}; $label_count)
           )
         )
         );
@@ -1883,7 +1883,7 @@ def eval_ast($query; $path; $env; undefined_func):
         # TODO: possible to do with function instead of foreach?
         # TODO: path(foreach) behavior
         ( $query.term. foreach as { $term
-                                  , pattern: { name: $name }
+                                  , pattern: {name: $name}
                                   , start: $start
                                   , update: $update
                                   , extract: $extract
@@ -1891,25 +1891,25 @@ def eval_ast($query; $path; $env; undefined_func):
         | ( $extract
           //
             { term:
-                { type: "TermTypeIdentity" }
+                {type: "TermTypeIdentity"}
             }
           ) as $extract
         | _e($start; $path; $query_env; $label_count) as [$start_path, $start_v]
-        | foreach _e({ term: $term }; $path; $query_env; $label_count) as [$_, $v] (
+        | foreach _e({term: $term}; $path; $query_env; $label_count) as [$_, $v] (
           [$start_path, $start_v];
           ( . as [$p, $state]
           | $state
-          | _e($update; $p; $query_env + { ($name): { value: $v } }; $label_count)
+          | _e($update; $p; $query_env + {($name): {value: $v}}; $label_count)
           );
           ( . as [$update_p, $update_v]
           | $update_v
-          | _e($extract; $update_p; $query_env + { ($name): { value: $v } }; $label_count)
+          | _e($extract; $update_p; $query_env + {($name): {value: $v}}; $label_count)
           )
         )
         );
 
       def _try:
-        ( $query.term. try as { $body, catch: $catch_ }
+        ( $query.term. try as {$body, catch: $catch_}
         | ( $catch_
           //
             { term:
@@ -1931,12 +1931,12 @@ def eval_ast($query; $path; $env; undefined_func):
         );
 
       def _label:
-        ( $query.term. label as { $body, $ident }
+        ( $query.term. label as {$body, $ident}
         | try _e(
           $body;
           $path;
           # @label prefix to not collide with bindings
-          $query_env + { ("@label-" + $ident): $label_count };
+          $query_env + {("@label-" + $ident): $label_count};
           $label_count + 1
         )
         catch
@@ -1951,14 +1951,14 @@ def eval_ast($query; $path; $env; undefined_func):
         | if $query_env | has($label_ident) then
             _internal_break($query_env[$label_ident])
         else
-            { name: $ident } | undefined_func_error
+            {name: $ident} | undefined_func_error
         end
         );
 
       def _unary:
-        ( $query.term.unary as { $op, $term }
+        ( $query.term.unary as {$op, $term}
         |
-          def _f: _e({ term: $term }; $path; $query_env; $label_count);
+          def _f: _e({term: $term}; $path; $query_env; $label_count);
           # TODO: not +. as jq don't support + unary operator
           if $op == "+" then _f[1] | [[null], .]
           elif $op == "-" then _f[1] | [[null], -.]
@@ -1974,7 +1974,7 @@ def eval_ast($query; $path; $env; undefined_func):
         | $input
         | if $suffix.bind then
             # as $name | <body>
-            ( $suffix.bind as { $body, patterns: [$pattern] }
+            ( $suffix.bind as {$body, patterns: [$pattern]}
             | ($pattern | _e_pattern($v)) as $pattern_env
             | _e(
               $suffix.bind.body;
@@ -2008,7 +2008,7 @@ def eval_ast($query; $path; $env; undefined_func):
         );
 
       def _e_suffix_list($input; $path):
-        ( $query as { term: { $suffix_list } }
+        ( $query as {term: {$suffix_list}}
         |
           def _f($suffix_list):
             if ($suffix_list | length) == 0 then .
@@ -2063,7 +2063,7 @@ def eval_ast($query; $path; $env; undefined_func):
         else _e_type
         end
       elif $op then
-        ( $query as { $left, $right }
+        ( $query as {$left, $right}
         |
           def _l: _e($left; $path; $query_env; $label_count);
           def _r: _e($right; $path; $query_env; $label_count);
@@ -2754,7 +2754,7 @@ def parse_options:
       | .args.rest = .args.rest[2:]
       | if .program_args.named | has($key) | not then
           # jq parses values only of the first occurrence of each key
-          .program_args.named[$key] = { type: $option, $value }
+          .program_args.named[$key] = {type: $option, $value}
       end
       )
     end;
@@ -2823,7 +2823,7 @@ def parse_options:
         if .program == null then
           .program = $arg
         elif .args.rest_are_positional != null then
-          .program_args.positional += [{ type: .args.rest_are_positional, value: $arg }]
+          .program_args.positional += [{type: .args.rest_are_positional, value: $arg}]
         else
           .files += [$arg]
         end
@@ -2844,7 +2844,7 @@ def parse_options:
       parse_arg | parse_args
     else del(.args)
     end;
-  ( { args: { rest: . }
+  ( { args: {rest: .}
     , program_args:
       { positional: []
       , named: {}
@@ -2974,7 +2974,7 @@ def jqjq($args; $env):
       catch error("break")
         | . as $expr
         | null
-        | try ( ( eval($expr; { "$ENV": $env }; $builtins_env)
+        | try ( ( eval($expr; {"$ENV": $env}; $builtins_env)
                 | dump($opts)
                 )
               , if $opts.raw_no_lf then "\n" else empty end
@@ -3073,19 +3073,19 @@ def jqjq($args; $env):
               $ast;
               [];
               $builtins_env;
-              builtin_undefined_func({ "$ENV": { "jqjq": 123 } }; $builtins_env)
+              builtin_undefined_func({"$ENV": {"jqjq": 123}}; $builtins_env)
             ) as [$_path, $value]
               | $value
               ] as $actual_output
             | if $test.output == $actual_output then
               ( "OK: \($test_name)"
-              , { ok: true }
+              , {ok: true}
               )
             else
               ( "DIFF: \($test_name)"
               , "  Expected: \($test.output | _to_unslurped)"
               , "    Actual: \($actual_output | _to_unslurped)"
-              , { error: true }
+              , {error: true}
               )
             end
             )
@@ -3093,24 +3093,24 @@ def jqjq($args; $env):
           if $test.fail then
             if . == $test.error then
               ( "OK: \($test_name)"
-              , { ok: true }
+              , {ok: true}
               )
             else
               ( "FAIL DIFF: \($test_name)"
               , "  Expected: \($test.error)"
               , "    Actual: \(.)"
-              , { error: true }
+              , {error: true}
               )
             end
           else
             ( "ERROR: \($test_name)"
             , "  \(.)"
-            , { error: true }
+            , {error: true}
             )
           end
       );
     # this mess make it possible to run all tests and exit with non-zero if any test failed
-    ( foreach (_f, { end: true }) as $l (
+    ( foreach (_f, {end: true}) as $l (
       { errors: 0
       , oks: 0
       };
@@ -3122,7 +3122,7 @@ def jqjq($args; $env):
             else .
             end
         )
-      else . + { line: $l }
+      else . + {line: $l}
       end;
       .
     )

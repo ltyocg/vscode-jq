@@ -13,13 +13,11 @@ import { MAX_SEGMENT_LOOKAHEAD, TokenStream, endLine, newlinesBetween } from './
 
 /**
  * flatSpan 的补位风格：跨距内的组一律按单行模拟（见 spacing.ts 的
- * padsInsideBracket）。stack 是跨距内已开未闭的括号种类栈，
- * 空栈表示当前不在任何组内。
+ * padsInsideBracket，单行组不补位）。stack 是跨距内已开未闭的括号
+ * 种类栈，空栈表示当前不在任何组内。
  */
 function flatStyle(stack: string[]): BracketStyle | null {
-  return stack.length
-    ? { kind: stack[stack.length - 1] as BracketStyle['kind'], expanded: false, hanging: false }
-    : null
+  return stack.length ? { expanded: false, hanging: false } : null
 }
 
 export class Measure {
