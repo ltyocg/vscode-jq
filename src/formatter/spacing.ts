@@ -182,13 +182,19 @@ export function gapBetween(prev: FmtToken, next: FmtToken, enclosing: string): '
   }
   // 2. 开括号之后直接紧跟
   if (prev.type === 'operator' && OPENERS.has(prev.text)) return 'none'
-  // 3. 点号之后：'.foo'、'."foo"'、'.['
+  // 3. 点号之后：'.foo'、'."foo"'、'.['；关键字字段名（'.catch'、'.end'、
+  //    '$if_.then'）按源码邻接保留 —— '.catch' 与 '. catch'、'.end' 与
+  //    '. end' 语义不同（字段访问 vs 身份后跟子句关键字），归一化任一
+  //    方向都会改写程序
   if (prev.type === 'operator' && (prev.text === '.' || prev.text === '..')) {
     if (
       next.type === 'ident' ||
       next.type === 'string' ||
       (next.type === 'operator' && next.text === '[')
     ) {
+      return 'none'
+    }
+    if (next.type === 'keyword' && prev.line === next.line && prev.col + prev.text.length === next.col) {
       return 'none'
     }
     return 'space'

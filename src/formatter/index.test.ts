@@ -274,6 +274,19 @@ test('comment backslash continuation (jq 1.8 spec)', () => {
   assert.equal(fmt('2 # c \\ \n+ 3'), '2 # c \\ \n+ 3\n')
 })
 
+test('keyword field names after a dot keep source adjacency', () => {
+  // '.catch' 是字段访问（等价 '.["catch"]'），'. catch' 是身份后跟关键
+  // 字（语法错误）；反方向同样危险：'else . end' 收紧成 '.end' 会变成
+  // 字段访问。点号与关键字之间的间距只能按源码邻接保留，不可归一化
+  assert.equal(fmt('.catch = $c'), '.catch = $c\n')
+  assert.equal(fmt('if $end_ then .end = $end_ else . end'), 'if $end_ then .end = $end_ else . end\n')
+  assert.equal(fmt('{a: $if_.then, b: $if_.else}'), '{a: $if_.then, b: $if_.else}\n')
+  assert.equal(fmt('$q.term.reduce as $r'), '$q.term.reduce as $r\n')
+  // 源码有空格的保持空格（身份 + 子句关键字）
+  assert.equal(fmt('if .a then .b else . end'), 'if .a then .b else . end\n')
+  assert.equal(fmt('if . then 1 else 2 end'), 'if . then 1 else 2 end\n')
+})
+
 test('leading-dot number literals', () => {
   assert.equal(fmt('.5+.5e2'), '.5 + .5e2\n')
   assert.equal(fmt('[.5, .25]'), '[.5, .25]\n')

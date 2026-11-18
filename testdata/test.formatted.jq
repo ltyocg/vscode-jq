@@ -720,7 +720,7 @@ def parse:
                     , then: $then_
                     , else: $else_
                     }
-                  | if ($elif_ | length) > 0 then . elif = $elif_
+                  | if ($elif_ | length) > 0 then .elif = $elif_
                     else .
                     end
                   )
@@ -843,7 +843,7 @@ def parse:
             , { index:
                   ( {is_slice: true}
                   | if $start then .start = $start else . end
-                  | if $end_ then . end = $end_ else . end
+                  | if $end_ then .end = $end_ else . end
                   )
               }
             ]
@@ -941,7 +941,7 @@ def parse:
                 , index:
                     ( {is_slice: true}
                     | if $start then .start = $start else . end
-                    | if $end_ then . end = $end_ else . end
+                    | if $end_ then .end = $end_ else . end
                     )
                 }
             }
@@ -1047,7 +1047,7 @@ def parse:
               { type: "TermTypeTry"
               , try:
                   ( {body: $body}
-                  | if $catch_ then . catch = $catch_ else . end
+                  | if $catch_ then .catch = $catch_ else . end
                   )
               }
           }
@@ -1826,16 +1826,16 @@ def eval_ast($query; $path; $env; undefined_func):
         | $query.term as {if: $if_}
         | [ # if <cond> then <then> ...
           [ $if_.cond
-          , $if_. then
+          , $if_.then
           ]
           # [elif <cond> then <then>]*
-          , ( $if_. elif []?
-            | [.cond, . then]
+          , ( $if_.elif []?
+            | [.cond, .then]
             )
-          , if $if_. else then
+          , if $if_.else then
               # else <then> end -> else true then <then> end
               [ {term: {type: "TermTypeTrue"}}
-              , $if_. else
+              , $if_.else
               ]
             else
               # end -> else true then . end
@@ -1864,11 +1864,11 @@ def eval_ast($query; $path; $env; undefined_func):
       def _reduce:
         # TODO: possible to do with function instead of reduce?
         # TODO: path(reduce) behavior
-        ( $query.term. reduce as { $term
-                                 , pattern: {name: $name}
-                                 , start: $start
-                                 , update: $update
-                                 }
+        ( $query.term.reduce as { $term
+                                , pattern: {name: $name}
+                                , start: $start
+                                , update: $update
+                                }
         | _e($start; $path; $query_env; $label_count) as [$start_path, $start_v]
         | reduce _e({term: $term}; $start_path; $query_env; $label_count) as [$p, $v] (
           [$start_path, $start_v];
@@ -1882,12 +1882,12 @@ def eval_ast($query; $path; $env; undefined_func):
       def _foreach:
         # TODO: possible to do with function instead of foreach?
         # TODO: path(foreach) behavior
-        ( $query.term. foreach as { $term
-                                  , pattern: {name: $name}
-                                  , start: $start
-                                  , update: $update
-                                  , extract: $extract
-                                  }
+        ( $query.term.foreach as { $term
+                                 , pattern: {name: $name}
+                                 , start: $start
+                                 , update: $update
+                                 , extract: $extract
+                                 }
         | ( $extract
           //
             { term:
@@ -1909,7 +1909,7 @@ def eval_ast($query; $path; $env; undefined_func):
         );
 
       def _try:
-        ( $query.term. try as {$body, catch: $catch_}
+        ( $query.term.try as {$body, catch: $catch_}
         | ( $catch_
           //
             { term:
@@ -1931,7 +1931,7 @@ def eval_ast($query; $path; $env; undefined_func):
         );
 
       def _label:
-        ( $query.term. label as {$body, $ident}
+        ( $query.term.label as {$body, $ident}
         | try _e(
           $body;
           $path;
@@ -1946,7 +1946,7 @@ def eval_ast($query; $path; $env; undefined_func):
         );
 
       def _break:
-        ( $query.term. break as $ident
+        ( $query.term.break as $ident
         | ("@label-" + $ident) as $label_ident
         | if $query_env | has($label_ident) then
             _internal_break($query_env[$label_ident])
@@ -3118,7 +3118,7 @@ def jqjq($args; $env):
         ( .line = false
         | if $l.error then .errors += 1
           elif $l.ok then .oks += 1
-          elif $l. end then . end = true
+          elif $l.end then .end = true
             else .
             end
         )
@@ -3126,7 +3126,7 @@ def jqjq($args; $env):
       end;
       .
     )
-    | if . end then
+    | if .end then
         ( "\(.oks) of \(.oks + .errors) tests passed"
         , if .errors > 0 then "" | halt_error(1) else empty end
         )
