@@ -133,7 +133,7 @@ def lex:
         )
       )
       //
-      # conditionally look for end or middle of interpolated string
+        # conditionally look for end or middle of interpolated string
         ( select($string_stack[-1] == "\\(")
         | _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
           ( .[1:-2]
@@ -229,7 +229,7 @@ def parse:
       def _ops:
         if filter then null
         elif .pipe then {prec: 0, name: "|", assoc: "right"}
-          # TODO: understand why jq has left associativity for "," but right seems to give correct parse tree
+        # TODO: understand why jq has left associativity for "," but right seems to give correct parse tree
         elif .comma then {prec: 1, name: ",", assoc: "right"}
         elif .slash_slash then {prec: 2, name: "//", assoc: "right"}
         elif .equal then {prec: 3, name: "=", assoc: "none"}
@@ -349,8 +349,8 @@ def parse:
               ]
             )
             //
-            # {"a"} -> {a: .a}
-            # {"a": ...} -> {a: ...}
+              # {"a"} -> {a: .a}
+              # {"a": ...} -> {a: ...}
               ( _p("string") as [$rest, $string]
               | $rest
               | _optional(_colon_val) as [$rest, $val]
@@ -362,15 +362,15 @@ def parse:
                   }
                 ]
               )
-              //
-            # {$a} -> {a: $a}
+            //
+              # {$a} -> {a: $a}
               ( _consume(.binding) as [$rest, {$binding}]
               | [ $rest
                 , {key: $binding}
                 ]
               )
-              //
-            # {(...): ...} -> {...: ...}
+            //
+              # {(...): ...} -> {...: ...}
               ( _p("subquery") as [$rest, $query]
               | $rest
               | _colon_val as [$rest, $val]
@@ -442,8 +442,8 @@ def parse:
                 ]
               )
               //
-              # {"a"} -> {a: .a}
-              # {"a": ...} -> {a: ...}
+                # {"a"} -> {a: .a}
+                # {"a": ...} -> {a: ...}
                 ( _p("string") as [$rest, $string]
                 | $rest
                 | _optional(_colon_pattern) as [$rest, $val]
@@ -455,15 +455,15 @@ def parse:
                     }
                   ]
                 )
-                //
-              # {$a} -> {a: $a}
+              //
+                # {$a} -> {a: $a}
                 ( _consume(.binding) as [$rest, {$binding}]
                 | [ $rest
                   , {key: $binding}
                   ]
                 )
-                //
-              # {(...): ...} -> {...: ...}
+              //
+                # {(...): ...} -> {...: ...}
                 ( _p("subquery") as [$rest, $query]
                 | $rest
                 | _colon_pattern as [$rest, $val]
@@ -808,7 +808,7 @@ def parse:
         | [$rest, {iter: true}]
         )
         //
-        # [...] query
+          # [...] query
           ( _optional(
             # TODO: _one() etc?
             ( _consume(.dot) as [$rest, $_]
@@ -826,10 +826,10 @@ def parse:
               }
             ]
           )
-          //
-        # [...:...]
-        # [:...]
-        # [...:]
+        //
+          # [...:...]
+          # [:...]
+          # [...:]
           ( _consume(.lsquare)[0]
           | _optional(_p("query")) as [$rest, $start]
           | $rest
@@ -848,8 +848,8 @@ def parse:
               }
             ]
           )
-          //
-        # .name index
+        //
+          # .name index
           ( _consume(.index) as [$rest, {$index}]
           | [ $rest
             , { index:
@@ -857,8 +857,8 @@ def parse:
               }
             ]
           )
-          //
-        # ."name" index
+        //
+          # ."name" index
           ( _consume(.dot)[0]
           | _p("string") as [$rest, $string]
           | $rest
@@ -870,28 +870,28 @@ def parse:
               }
             ]
           )
-          //
-        # ? optional (try)
+        //
+          # ? optional (try)
           ( _consume(.qmark) as [$rest, $_]
           | [ $rest
             , {optional: true}
             ]
           )
-          //
-            ( _keyword("as")
-            | _p("pattern") as [$rest, $pattern]
-            | $rest
-            | _consume(.pipe)[0]
-            | _p("query") as [$rest, $body]
-            | $rest
-            | [ .
-              , { bind:
-                    { body: $body
-                    , patterns: [$pattern]
-                    }
-                }
-              ]
-            )
+        //
+          ( _keyword("as")
+          | _p("pattern") as [$rest, $pattern]
+          | $rest
+          | _consume(.pipe)[0]
+          | _p("query") as [$rest, $body]
+          | $rest
+          | [ .
+            , { bind:
+                  { body: $body
+                  , patterns: [$pattern]
+                  }
+              }
+            ]
+          )
       );
 
     # .
@@ -959,7 +959,7 @@ def parse:
           ]
         )
       //
-      # ."name" index
+        # ."name" index
         ( _consume(.dot)[0]
         | _p("string") as [$rest, $string]
         | $rest
@@ -1360,7 +1360,7 @@ def eval_ast($query; $path; $env; undefined_func):
         )
       ) as $query_env
     |
-    # eval a index, is also used by _e_suffix
+      # eval a index, is also used by _e_suffix
       def _e_index($index; $query_path; $query_input; $opt):
         try ( $index as { $name
                         , $str
@@ -1614,12 +1614,12 @@ def eval_ast($query; $path; $env; undefined_func):
               elif $name == "explode/0" then [[null], explode]
               elif $name == "implode/0" then [[null], implode]
               elif $name == "tonumber/0" then [[null], tonumber]
-                # TODO: implement in jqjq?
+              # TODO: implement in jqjq?
               elif $name == "tostring/0" then [[null], tostring]
               elif $name == "tojson/0" then [[null], _tojson]
               elif $name == "fromjson/0" then [[null], _fromjson]
-                # TODO: make args general
-                # note "null | error" is same as empty
+              # TODO: make args general
+              # note "null | error" is same as empty
               elif $name == "error/0" then error
               elif $name == "error/1" then
                 # TODO: see comment in _try
@@ -1678,7 +1678,7 @@ def eval_ast($query; $path; $env; undefined_func):
               elif $name == "log2/0" then [[null], log2]
               elif $name == "logb/0" then [[null], logb]
               elif $name == "nearbyint/0" then [[null], nearbyint]
-                #elif $name == "pow10/0"      then [[null], pow10]
+              #elif $name == "pow10/0"      then [[null], pow10]
               elif $name == "rint/0" then [[null], rint]
               elif $name == "round/0" then [[null], round]
               elif $name == "significand/0" then [[null], significand]
@@ -1702,13 +1702,13 @@ def eval_ast($query; $path; $env; undefined_func):
               elif $name == "fmax/2" then [[null], fmax(a0; a1)]
               elif $name == "fmin/2" then [[null], fmin(a0; a1)]
               elif $name == "fmod/2" then [[null], fmod(a0; a1)]
-                # TODO: in jq docs but seem missing
-                #elif $name == "frexp/2" then [[null],frexp(a0; a1)]
+              # TODO: in jq docs but seem missing
+              #elif $name == "frexp/2" then [[null],frexp(a0; a1)]
               elif $name == "hypot/2" then [[null], hypot(a0; a1)]
               elif $name == "jn/2" then [[null], jn(a0; a1)]
               elif $name == "ldexp/2" then [[null], ldexp(a0; a1)]
-                # TODO: in jq docs but seem missing
-                # elif $name == "modf/2" then [[null],modf(a0; a1)]
+              # TODO: in jq docs but seem missing
+              # elif $name == "modf/2" then [[null],modf(a0; a1)]
               elif $name == "nextafter/2" then [[null], nextafter(a0; a1)]
               elif $name == "nexttoward/2" then [[null], nexttoward(a0; a1)]
               elif $name == "pow/2" then [[null], pow(a0; a1)]
@@ -2012,7 +2012,7 @@ def eval_ast($query; $path; $env; undefined_func):
         |
           def _f($suffix_list):
             if ($suffix_list | length) == 0 then .
-              # .a.b?? case, just skip extra optional "?"
+            # .a.b?? case, just skip extra optional "?"
             elif $suffix_list[0].optional then _f($suffix_list[1:])
             else
               ( $suffix_list[1].optional as $opt
