@@ -107,10 +107,10 @@ def lex:
       | { result: ($token | del(.string_stack))
         , remain: $remain[length:]
         , string_stack:
-          ( if $token.string_stack == null then $string_stack
-            else $token.string_stack
-            end
-          )
+            ( if $token.string_stack == null then $string_stack
+              else $token.string_stack
+              end
+            )
         }
       );
     def _re($re; f): _if_match_then(match($re; "").string; f);
@@ -301,10 +301,10 @@ def parse:
       ( _consume(c) as [$rest, $v]
       | [ $rest
         , { term:
-            ( $v
-            | f
-            | .type = $type
-            )
+              ( $v
+              | f
+              | .type = $type
+              )
           }
         ]
       );
@@ -357,7 +357,7 @@ def parse:
               | $rest
               | [ .
                 , { key_string:
-                    {str: $string.term.str}
+                      {str: $string.term.str}
                   , val: $val
                   }
                 ]
@@ -401,10 +401,10 @@ def parse:
       | _consume(.rcurly) as [$rest, $_]
       | [ $rest
         , { term:
-            { type: "TermTypeObject"
-            , object:
-                {key_vals: $key_vals}
-            }
+              { type: "TermTypeObject"
+              , object:
+                  {key_vals: $key_vals}
+              }
           }
         ]
       );
@@ -450,7 +450,7 @@ def parse:
                 | $rest
                 | [ .
                   , { key_string:
-                      {str: $string.term.str}
+                        {str: $string.term.str}
                     , val: $val
                     }
                   ]
@@ -533,9 +533,9 @@ def parse:
       | _consume(.rparen) as [$rest, $_]
       | [ $rest
         , { term:
-            { type: "TermTypeQuery"
-            , query: $query
-            }
+              { type: "TermTypeQuery"
+              , query: $query
+              }
           }
         ]
       );
@@ -562,22 +562,22 @@ def parse:
         | _consume(.rparen)[0]
         | [ .
           , { term:
-              { type: "TermTypeFunc"
-              , func:
-                  { name: $ident
-                  , args: $args
-                  }
-              }
+                { type: "TermTypeFunc"
+                , func:
+                    { name: $ident
+                    , args: $args
+                    }
+                }
             }
           ]
         )
       //
         [ .
         , { term:
-            { type: "TermTypeFunc"
-            , func:
-                {name: $ident}
-            }
+              { type: "TermTypeFunc"
+              , func:
+                  {name: $ident}
+              }
           }
         ]
       );
@@ -587,10 +587,10 @@ def parse:
       ( _consume(.binding) as [$rest, {$binding}]
       | [ $rest
         , { term:
-            { type: "TermTypeFunc"
-            , func:
-                {name: $binding}
-            }
+              { type: "TermTypeFunc"
+              , func:
+                  {name: $binding}
+              }
           }
         ]
       );
@@ -603,10 +603,10 @@ def parse:
       | _consume(.rsquare) as [$rest, $_]
       | [ $rest
         , { term:
-            { type: "TermTypeArray"
-            , array:
-                {query: $query}
-            }
+              { type: "TermTypeArray"
+              , array:
+                  {query: $query}
+              }
           }
         ]
       );
@@ -628,14 +628,14 @@ def parse:
       | _consume(.rparen)[0]
       | [ .
         , { term:
-            { type: "TermTypeReduce"
-            , reduce:
-                { term: $term.term
-                , pattern: $pattern
-                , start: $start
-                , update: $update
-                }
-            }
+              { type: "TermTypeReduce"
+              , reduce:
+                  { term: $term.term
+                  , pattern: $pattern
+                  , start: $start
+                  , update: $update
+                  }
+              }
           }
         ]
       );
@@ -665,16 +665,16 @@ def parse:
       | $rest
       | [ .
         , { term:
-            { type: "TermTypeForeach"
-            , foreach:
-                ( { term: $term.term
-                  , pattern: $pattern
-                  , start: $start
-                  , update: $update
-                  }
-                | if $extract then .extract = $extract else . end
-                )
-            }
+              { type: "TermTypeForeach"
+              , foreach:
+                  ( { term: $term.term
+                    , pattern: $pattern
+                    , start: $start
+                    , update: $update
+                    }
+                  | if $extract then .extract = $extract else . end
+                  )
+              }
           }
         ]
       );
@@ -714,17 +714,17 @@ def parse:
       | _keyword("end")
       | [ .
         , { term:
-            { type: "TermTypeIf"
-            , if:
-                ( { cond: $cond
-                  , then: $then_
-                  , else: $else_
-                  }
-                | if ($elif_ | length) > 0 then . elif = $elif_
-                  else .
-                  end
-                )
-            }
+              { type: "TermTypeIf"
+              , if:
+                  ( { cond: $cond
+                    , then: $then_
+                    , else: $else_
+                    }
+                  | if ($elif_ | length) > 0 then . elif = $elif_
+                    else .
+                    end
+                  )
+              }
           }
         ]
       );
@@ -822,7 +822,7 @@ def parse:
           | _consume(.rsquare) as [$rest, $_]
           | [ $rest
             , { index:
-                {start: $start}
+                  {start: $start}
               }
             ]
           )
@@ -841,10 +841,10 @@ def parse:
           | if $start == null and $end_ == null then empty end
           | [ .
             , { index:
-                ( {is_slice: true}
-                | if $start then .start = $start else . end
-                | if $end_ then . end = $end_ else . end
-                )
+                  ( {is_slice: true}
+                  | if $start then .start = $start else . end
+                  | if $end_ then . end = $end_ else . end
+                  )
               }
             ]
           )
@@ -853,7 +853,7 @@ def parse:
           ( _consume(.index) as [$rest, {$index}]
           | [ $rest
             , { index:
-                {name: $index}
+                  {name: $index}
               }
             ]
           )
@@ -864,9 +864,9 @@ def parse:
           | $rest
           | [ .
             , { index:
-                { str:
-                    {str: $string.term.str}
-                }
+                  { str:
+                      {str: $string.term.str}
+                  }
               }
             ]
           )
@@ -886,9 +886,9 @@ def parse:
             | $rest
             | [ .
               , { bind:
-                  { body: $body
-                  , patterns: [$pattern]
-                  }
+                    { body: $body
+                    , patterns: [$pattern]
+                    }
                 }
               ]
             )
@@ -899,7 +899,7 @@ def parse:
       ( _consume(.dot) as [$rest, $_]
       | [ $rest
         , { term:
-            {type: "TermTypeIdentity"}
+              {type: "TermTypeIdentity"}
           }
         ]
       );
@@ -917,10 +917,10 @@ def parse:
         | _consume(.rsquare) as [$rest, $_]
         | [ $rest
           , { term:
-              { type: "TermTypeIndex"
-              , index:
-                  {start: $query}
-              }
+                { type: "TermTypeIndex"
+                , index:
+                    {start: $query}
+                }
             }
           ]
         )
@@ -937,13 +937,13 @@ def parse:
         | if $start == null and $end_ == null then empty else . end
         | [ .
           , { term:
-              { type: "TermTypeIndex"
-              , index:
-                  ( {is_slice: true}
-                  | if $start then .start = $start else . end
-                  | if $end_ then . end = $end_ else . end
-                  )
-              }
+                { type: "TermTypeIndex"
+                , index:
+                    ( {is_slice: true}
+                    | if $start then .start = $start else . end
+                    | if $end_ then . end = $end_ else . end
+                    )
+                }
             }
           ]
         )
@@ -951,10 +951,10 @@ def parse:
         ( _consume(.index) as [$rest, {$index}]
         | [ $rest
           , { term:
-              { type: "TermTypeIndex"
-              , index:
-                  {name: $index}
-              }
+                { type: "TermTypeIndex"
+                , index:
+                    {name: $index}
+                }
             }
           ]
         )
@@ -965,12 +965,12 @@ def parse:
         | $rest
         | [ .
           , { term:
-              { type: "TermTypeIndex"
-              , index:
-                  { str:
-                      {str: $string.term.str}
-                  }
-              }
+                { type: "TermTypeIndex"
+                , index:
+                    { str:
+                        {str: $string.term.str}
+                    }
+                }
             }
           ]
         )
@@ -994,17 +994,17 @@ def parse:
       | _consume(.string_end) as [$rest, {$string_end}]
       | [ $rest
         , { term:
-            { type: "TermTypeString"
-            , queries:
-                [ {term: {str: $string_start, type: "TermTypeString"}}
-                , ( $queries[]
-                  | if .term and .term.type == "TermTypeString" then .
-                    else {term: {query: ., type: "TermTypeQuery"}}
-                    end
-                  )
-                , {term: {str: $string_end, type: "TermTypeString"}}
-                ]
-            }
+              { type: "TermTypeString"
+              , queries:
+                  [ {term: {str: $string_start, type: "TermTypeString"}}
+                  , ( $queries[]
+                    | if .term and .term.type == "TermTypeString" then .
+                      else {term: {query: ., type: "TermTypeQuery"}}
+                      end
+                    )
+                  , {term: {str: $string_end, type: "TermTypeString"}}
+                  ]
+              }
           }
         ]
       );
@@ -1021,10 +1021,10 @@ def parse:
       | _string as [$rest, $string]
       | [ $rest
         , { term:
-            { type: "TermTypeFormat"
-            , format: $at_ident
-            , str: $string
-            }
+              { type: "TermTypeFormat"
+              , format: $at_ident
+              , str: $string
+              }
           }
         ]
       );
@@ -1044,12 +1044,12 @@ def parse:
       | $rest
       | [ .
         , { term:
-            { type: "TermTypeTry"
-            , try:
-                ( {body: $body}
-                | if $catch_ then . catch = $catch_ else . end
-                )
-            }
+              { type: "TermTypeTry"
+              , try:
+                  ( {body: $body}
+                  | if $catch_ then . catch = $catch_ else . end
+                  )
+              }
           }
         ]
       );
@@ -1064,12 +1064,12 @@ def parse:
       | $rest
       | [ .
         , { term:
-            { type: "TermTypeLabel"
-            , label:
-                { body: $body
-                , ident: $binding
-                }
-            }
+              { type: "TermTypeLabel"
+              , label:
+                  { body: $body
+                  , ident: $binding
+                  }
+              }
           }
         ]
       );
@@ -1081,9 +1081,9 @@ def parse:
       | $rest
       | [ .
         , { term:
-            { type: "TermTypeBreak"
-            , break: $binding
-            }
+              { type: "TermTypeBreak"
+              , break: $binding
+              }
           }
         ]
       );
@@ -1095,12 +1095,12 @@ def parse:
       | $rest
       | [ .
         , { term:
-            { type: "TermTypeUnary"
-            , unary:
-                { op: $op
-                , term: $term.term
-                }
-            }
+              { type: "TermTypeUnary"
+              , unary:
+                  { op: $op
+                  , term: $term.term
+                  }
+              }
           }
         ]
       );
@@ -1111,10 +1111,10 @@ def parse:
       ( _consume(.dotdot) as [$rest, $_]
       | [ $rest
         , { term:
-            { type: "TermTypeFunc"
-            , func:
-                {name: "recurse"}
-            }
+              { type: "TermTypeFunc"
+              , func:
+                  {name: "recurse"}
+              }
           }
         ]
       );
@@ -1314,9 +1314,9 @@ def func_defs_to_env($env):
     ( . as $func_env
     | .
     + { (func_name($f.name; $f.args)):
-        ( $f
-        | .env = $func_env
-        )
+          ( $f
+          | .env = $func_env
+          )
       }
     )
   );
@@ -1349,9 +1349,9 @@ def eval_ast($query; $path; $env; undefined_func):
   def _e($query; $path; $env; $label_count):
     ( . # debug({c: ., $query, $path, $env})
     | $query as { term:
-        { type: $type
-        , suffix_list: [{$optional}]
-        }
+                    { type: $type
+                    , suffix_list: [{$optional}]
+                    }
                 , $op
                 , $func_defs
                 }
@@ -1553,11 +1553,11 @@ def eval_ast($query; $path; $env; undefined_func):
                   ) as $name
                 | { key: ($name + "/0")
                   , value:
-                    { body: $call_args[.key]
-                      # save current env
-                    , env: $query_env
-                    , lambda: true
-                    }
+                      { body: $call_args[.key]
+                        # save current env
+                      , env: $query_env
+                      , lambda: true
+                      }
                   }
                 )
               )
@@ -2113,9 +2113,9 @@ def eval_ast($query; $path; $env; undefined_func):
                       , args:
                           [ $left
                           , { term:
-                              { type: "TermTypeString"
-                              , str: $op
-                              }
+                                { type: "TermTypeString"
+                                , str: $op
+                                }
                             }
                           , $right
                           ]
@@ -2846,9 +2846,9 @@ def parse_options:
     end;
   ( { args: {rest: .}
     , program_args:
-      { positional: []
-      , named: {}
-      }
+        { positional: []
+        , named: {}
+        }
     , indent: 2
     , print_pretty: true
     }

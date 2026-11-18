@@ -115,6 +115,8 @@ export class Layout {
   #prevRealIdx = -1
   /** prevReal 是否由断行开始、独占一行（行首风格的运算符） */
   #prevRealLead = false
+  /** 每个 token 发射后的起始列（按 token 下标）；多行 token 无意义 */
+  readonly #emitStart: number[] = []
   /** 上一个已发射内容（代码 token 或注释）的结束行号 */
   #lastAnyEndLine = -1
 
@@ -176,6 +178,7 @@ export class Layout {
       }
 
       // -- 记账：语法上下文与游标 --
+      this.#emitStart[i] = this.#out.col() - t.text.length
       this.#updateContexts(t, i)
       this.#prevReal = t
       this.#prevRealIdx = i
@@ -225,6 +228,31 @@ export class Layout {
       p.line === t.line &&
       endCol(p) === t.col
     )
+  }
+
+  /**
+   * 冒号（tokens[colonIdx]）左侧键表达式起始 token 的发射起始列；
+   * 无法确定（注释、跨行 token、括号不配对）时返回 null，退回
+   * 上下文缩进。'(expr):' 计算键回溯到配对的 '('。
+   */
+  #keyStartCol(colonIdx: number): number | null {
+    let k = colonIdx - 1
+    const key = this.#tokens[k]
+    if (key === undefined || key.type === 'comment') return null
+    if (key.type === 'operator' && key.text === ')') {
+      let depth = 0
+      for (; k >= 0; k--) {
+        const t = this.#tokens[k]
+        if (t.type === 'operator' && t.text === ')') depth++
+        else if (t.type === 'operator' && t.text === '(') {
+          if (--depth === 0) break
+        }
+      }
+      if (k < 0) return null
+    }
+    const tk = this.#tokens[k]
+    const start = this.#emitStart[k]
+    return start !== undefined && tk.line === endLine(tk) ? start : null
   }
 
   #emitComment(t: FmtToken): void {
@@ -377,10 +405,10 @@ export class Layout {
             nl > 0
           ) {
             // 对象键的冒号之后：源码换行处保留。冒号之下开启一个
-            // 层级 —— 值比所在对象组的内容层（键所在的层）深一层，
-            // 而不是比键所在行的行首深一层（悬挂组里行首属于外层，
-            // 那样值会与开括号平级）
-            indent = this.#ctxIndent + this.#opts.indentSize
+            // 层级 —— 值比键表达式的起始列深一层。键前常有 '{ ' 或
+            // ', ' 前缀（开括号/分隔符中置），键的起始列比组内容层
+            // 深一级，按内容层算会让值与键同列
+            indent = (this.#keyStartCol(this.#prevRealIdx) ?? this.#ctxIndent) + this.#opts.indentSize
           }
           break
         case 'afterOpener': {
