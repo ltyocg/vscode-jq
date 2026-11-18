@@ -21,7 +21,15 @@
  *  - afterBinop：decide 与 predict 两侧都只认源码换行（不补断）。
  */
 import { CLAUSE_KEYWORDS, CLOSERS, LINE_BREAK_BINOPS, OPENERS, type FmtToken } from './spacing'
-import type { TokenStream } from './tokens'
+import { matchBackward, type TokenStream } from './tokens'
+
+/**
+ * 子句关键字归属的子句栈种类：'catch' 属 try，其余（then/elif/else/
+ * end）属 if。断行决策与注释缩进两处共用。
+ */
+export function clauseStackKind(text: string): 'if' | 'try' {
+  return text === 'catch' ? 'try' : 'if'
+}
 
 /**
  * 断点种类。前七种断在 tokens[k] 之前（k 自身是断点 token），
@@ -59,19 +67,7 @@ function afterAsPattern(st: TokenStream, k: number): boolean {
   if (prev.type === 'variable') {
     j = k - 2
   } else if (prev.type === 'operator' && prev.text === ']') {
-    // 回溯找配对的 '['（match 只存开括号→闭括号方向）
-    let depth = 0
-    let open = -1
-    for (let p = k - 1; p >= 0; p--) {
-      const t = st.tokens[p]
-      if (t.type === 'operator' && t.text === ']') depth++
-      else if (t.type === 'operator' && t.text === '[') {
-        if (--depth === 0) {
-          open = p
-          break
-        }
-      }
-    }
+    const open = matchBackward(st.tokens, k - 1)
     if (open < 0) return false
     j = open - 1
   } else {

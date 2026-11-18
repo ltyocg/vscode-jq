@@ -8,7 +8,7 @@
  */
 
 import type { FormatOptions } from './api'
-import { breakAfter, breakBefore } from './breakkind'
+import { breakAfter, breakBefore, clauseStackKind } from './breakkind'
 import { LineBuilder, trimLineEnd } from './emit'
 import { Measure } from './measure'
 import { Predict } from './predict'
@@ -20,7 +20,7 @@ import {
   padsInsideBracket,
   type FmtToken
 } from './spacing'
-import { TokenStream, endCol, endLine, newlinesBetween } from './tokens'
+import { TokenStream, endCol, endLine, matchBackward, newlinesBetween } from './tokens'
 
 /**
  * 保留的连续空行上限：源码空行原样保留、绝不凭空增加，
@@ -52,11 +52,6 @@ interface GroupCtx {
    * 前导分隔符对齐到这一列，与开括号同列。
    */
   alignCol: number
-  /**
-   * 组内顶层分隔符是否采用前导风格（源码在某个 ','/';' 之前换行）。
-   * 前导分隔符与悬挂组的闭括号都对齐到开括号所在列（见 alignCol）。
-   */
-  leadSep: boolean
   /**
    * 开括号与前一个 token 粘连（调用语法 'f('，无空格）：闭括号与
    * 运算链回到开括号所在行的行首而非开括号列 —— 调用的括号与函数名
@@ -236,6 +231,19 @@ export class Layout {
     return g.callLike ? g.closeIndent : g.alignCol
   }
 
+  /**
+   * 管道断行的缩进：悬挂链上对齐开括号列（见 hangingChainAlign），
+   * 其余（语句级、分隔式组、组内元素内部）比上下文深一层。
+   */
+  #pipeIndent(g: GroupCtx | undefined): number {
+    return this.#hangingChainAlign(g) ?? this.#ctxIndent + this.#opts.indentSize
+  }
+
+  /** prevReal 的发射起始列；无记录时回退当前行行首（防御性） */
+  #prevRealStart(): number {
+    return this.#emitStart[this.#prevRealIdx] ?? this.#out.indentCols
+  }
+
   /** tokens[i] 的开括号是否与前一个 token 粘连（调用语法 'f('） */
   #isCallLike(i: number): boolean {
     const t = this.#tokens[i]
@@ -298,14 +306,7 @@ export class Layout {
     const key = this.#tokens[k]
     if (key === undefined || key.type === 'comment') return null
     if (key.type === 'operator' && key.text === ')') {
-      let depth = 0
-      for (; k >= 0; k--) {
-        const t = this.#tokens[k]
-        if (t.type === 'operator' && t.text === ')') depth++
-        else if (t.type === 'operator' && t.text === '(') {
-          if (--depth === 0) break
-        }
-      }
+      k = matchBackward(this.#tokens, k)
       if (k < 0) return null
     }
     const tk = this.#tokens[k]
@@ -342,16 +343,14 @@ export class Layout {
         //（基础缩进取运算符自身的发射起始列，连续注释不逐级抬高）
         const base =
           p.text === '|'
-            ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
-            : (this.#hangingChainAlign(innerGroup) ??
-              this.#emitStart[this.#prevRealIdx] ??
-              this.#out.indentCols)
+            ? this.#pipeIndent(innerGroup)
+            : (this.#hangingChainAlign(innerGroup) ?? this.#prevRealStart())
         indent = base + this.#opts.indentSize
       } else if (this.#nextIsClauseKeyword(i)) {
         // 下一行是子句关键字（elif/else/end/catch/then）：注释与关键
         // 字所在列对齐，而不是分支内容缩进
         const kw = this.#tokens[this.#nextRealIdxAfter(i)]
-        indent = this.#findClauseIndent(kw.text === 'catch' ? 'try' : 'if') ?? this.#ctxIndent
+        indent = this.#findClauseIndent(clauseStackKind(kw.text)) ?? this.#ctxIndent
       } else if (this.#bodyIndent !== null && this.#bodyIndent.depth === this.#groups.length) {
         indent = this.#bodyIndent.indent
       } else {
@@ -381,14 +380,11 @@ export class Layout {
       case 'pipe': {
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
         // 断行。尾随风格（'|' 之后源码已换行）不抢断：下一片段反正
-        // 会另起一行，交给 afterBinop 按源码保留。缩进：悬挂组里挂
-        // 在开括号行上的运算符链与开括号竖向对齐（同加号等行首双目
-        // 运算符的既有风格），其余（语句级、分隔式组、组内元素内部）
-        // 比上下文深一层
+        // 会另起一行，交给 afterBinop 按源码保留。缩进见 pipeIndent
         const next = this.#tokens[i + 1]
         const trailing = !!next && newlinesBetween(t, next) > 0
         if (!inlineInnermost && (nl > 0 || (this.#m.pipeOverflow(i) && !trailing))) {
-          indent = this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
+          indent = this.#pipeIndent(innerGroup)
         }
         break
       }
@@ -430,7 +426,7 @@ export class Layout {
       case 'clause':
         // 子句关键字：源码有换行或行宽不够时，回到 if/try 关键字所在列
         if (!inlineInnermost && (nl > 0 || this.#m.clauseOverflow(i))) {
-          indent = this.#findClauseIndent(t.text === 'catch' ? 'try' : 'if') ?? this.#ctxIndent
+          indent = this.#findClauseIndent(clauseStackKind(t.text)) ?? this.#ctxIndent
         }
         break
       case 'def': {
@@ -459,20 +455,10 @@ export class Layout {
       const p = this.#tokens[this.#prevRealIdx]
       switch (breakAfter(this.#st, this.#prevRealIdx)) {
         case 'afterSep':
-          if (p.text === ';') {
-            // def 结束的 ';'：语句级回到 ctxIndent；组内按组风格断行
-            if (this.#groups.length === 0) {
-              indent = this.#ctxIndent
-            } else if (this.#separatorBreaks(nl, i)) {
-              indent = this.#ctxIndent
-            }
-          } else {
-            // 逗号：语句级保留源码换行；组内按组风格断行
-            if (this.#groups.length === 0) {
-              if (nl > 0) indent = this.#ctxIndent
-            } else if (this.#separatorBreaks(nl, i)) {
-              indent = this.#ctxIndent
-            }
+          // 语句级：def 结束的 ';' 无条件断行，逗号保留源码换行；组内
+          // 一律按组风格断行（见 separatorBreaks）
+          if (this.#groups.length === 0 ? p.text === ';' || nl > 0 : this.#separatorBreaks(nl, i)) {
+            indent = this.#ctxIndent
           }
           break
         case 'afterColon':
@@ -513,12 +499,10 @@ export class Layout {
           // 独占一行的基础缩进取运算符自身的发射起始列：其间插入的
           // 独立注释会成为「当前行」，用 out.indentCols 会逐级抬高
           if (nl > 0) {
-            const opBase = this.#prevRealLead
-              ? (this.#emitStart[this.#prevRealIdx] ?? this.#out.indentCols)
-              : this.#out.indentCols
+            const opBase = this.#prevRealLead ? this.#prevRealStart() : this.#out.indentCols
             const base =
               p.text === '|'
-                ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
+                ? this.#pipeIndent(innerGroup)
                 : (this.#hangingChainAlign(innerGroup) ?? opBase)
             indent = this.#prevRealLead ? base + this.#opts.indentSize : base
           }
@@ -532,7 +516,7 @@ export class Layout {
       // 对齐开括号）
       indent =
         this.#prevReal && this.#prevReal.type === 'operator' && this.#prevReal.text === '|'
-          ? (this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize)
+          ? this.#pipeIndent(innerGroup)
           : this.#ctxIndent
     }
 
@@ -558,7 +542,6 @@ export class Layout {
           closeIndent: this.#out.indentCols,
           // 开括号刚发射完毕：其起始列 = 当前行末列减去自身宽度
           alignCol: this.#out.col() - t.text.length,
-          leadSep: style.leadSep,
           seenSep: false,
           callLike: this.#isCallLike(i)
         })

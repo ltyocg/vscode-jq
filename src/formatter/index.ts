@@ -39,7 +39,7 @@
  *  - breakkind.ts 断点词汇表（decide 与 predict 共用的「合法断点」分类）
  *  - emit.ts      行发射器（拼行、缩进、行宽）
  *  - measure.ts   行宽测量（片段试排、宽度预算）
- *  - predict.ts   源码断行推断（组风格：展开/悬挂/前导分隔符）
+ *  - predict.ts   源码断行推断（组风格：展开/悬挂）
  *  - layout.ts    布局决策（decide 引擎：断行、缩进、语法上下文栈）
  */
 

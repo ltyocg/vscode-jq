@@ -60,6 +60,23 @@ export function matchBrackets(tokens: FmtToken[]): Map<number, number> {
 }
 
 /**
+ * 从闭括号 token（tokens[k] 为 ')' / ']' / '}'）回溯到配对开括号的
+ * 下标；不配对时返回 -1。match 只存开括号→闭括号方向，这里是反方向
+ * 的按需回溯（token 流已由 matchBrackets 校验过配对）。
+ */
+export function matchBackward(tokens: readonly FmtToken[], k: number): number {
+  const closer = tokens[k].text
+  let depth = 0
+  for (let p = k; p >= 0; p--) {
+    const t = tokens[p]
+    if (t.type !== 'operator') continue
+    if (t.text === closer) depth++
+    else if (BRACKET_PAIR[t.text] === closer && --depth === 0) return p
+  }
+  return -1
+}
+
+/**
  * 断点搜索的向前看上限（token 数）。从某个 token 起最多看这么多
  * token 仍找不到合法断点，就把直到文件尾的余下部分视为一个片段：
  * 它会被当作不可分割的单行输出（括号组内部仍照常展开），以此

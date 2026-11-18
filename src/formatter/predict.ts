@@ -1,7 +1,7 @@
 /**
  * 源码断行推断（predict）：按源码形态推断「组会不会真的断行」「元素
- * 内部会不会断行」，并据此给出括号组的布局风格（悬挂式/分隔式、前导
- * 分隔符）。这是对反事实的推测 —— 回答「假如这样排，源码的换行会
+ * 内部会不会断行」，并据此给出括号组的布局风格（悬挂式/分隔式）。
+ * 这是对反事实的推测 —— 回答「假如这样排，源码的换行会
  * 落在哪里」；真正决定断行的是 layout.ts 的 decide 引擎，两侧共用的
  * 断点词汇表见 breakkind.ts（含有意不对称的契约说明）。
  */
@@ -17,8 +17,6 @@ export interface GroupStyle {
   expanded: boolean
   /** 悬挂式：开括号后接了内容；非悬挂的展开组为分隔式 */
   hanging: boolean
-  /** 组内顶层分隔符是否采用前导风格（源码在某个 ','/';' 之前换行） */
-  leadSep: boolean
 }
 
 export class Predict {
@@ -41,12 +39,10 @@ export class Predict {
    *   - 悬挂式：源码里开括号后接了内容（且首个元素放得进开括号行），
    *     不强制断行，组内换行按源码保留，超宽才在分隔符处补断；
    *   - 分隔式：开括号、每个元素、闭括号各占一行。
-   * leadSep 标记组内是否用了前导分隔符风格（见 GroupCtx）。
    */
   groupStyle(i: number): GroupStyle {
     const close = this.#st.match.get(i)!
-    const leadSep = this.hasLeadingSeparator(i, close)
-    if (close === i + 1) return { expanded: false, hanging: false, leadSep } // 空组
+    if (close === i + 1) return { expanded: false, hanging: false } // 空组
     let prevEnd = endLine(this.#st.tokens[i])
     let sourceBreak = false
     let hasComment = false
@@ -60,13 +56,12 @@ export class Predict {
     if (!sourceBreak && !hasComment) {
       // 源码单行：放得下就单行，放不下走分隔式
       const flat = this.#m.flatSpan(i + 1, close, this.#st.tokens[i].text)
-      if (flat === null) return { expanded: true, hanging: false, leadSep }
+      if (flat === null) return { expanded: true, hanging: false }
       // 单行组不补内侧空格（各种括号一致），extra 只是闭括号
       const extra = 1
       return {
         expanded: this.#col() + flat.length + extra > this.#opts.printWidth,
-        hanging: false,
-        leadSep
+        hanging: false
       }
     }
     // 源码多行或含注释。但组内未必真的会断行：换行可能全落在会折叠
@@ -77,39 +72,24 @@ export class Predict {
       // 此分支内不会有注释，flat 不会为 null；单行不补内侧空格
       const extra = 1
       if (flat !== null && this.#col() + flat.length + extra <= this.#opts.printWidth) {
-        return { expanded: false, hanging: false, leadSep }
+        return { expanded: false, hanging: false }
       }
     }
     // 展开且会断行：首个内容在开括号行、且首个元素放得进该行，
     // 用悬挂式；否则分隔式。开括号行上的行尾注释不参与宽度测量
-    if (!this.firstOnOpenerLine(i, close)) return { expanded: true, hanging: false, leadSep }
+    if (!this.firstOnOpenerLine(i, close)) return { expanded: true, hanging: false }
     const flat = this.#m.flatSpan(
       i + 1,
       this.firstSeparator(i, close),
       this.#st.tokens[i].text,
       true
     )
-    if (flat === null) return { expanded: true, hanging: false, leadSep }
+    if (flat === null) return { expanded: true, hanging: false }
     // +2：开括号后的补位空格 + 其后的分隔符（或闭括号）
     if (this.#col() + flat.length + 2 > this.#opts.printWidth) {
-      return { expanded: true, hanging: false, leadSep }
+      return { expanded: true, hanging: false }
     }
-    return { expanded: true, hanging: true, leadSep }
-  }
-
-  /** 组内顶层 ','/';' 之前是否有源码换行（前导分隔符风格） */
-  hasLeadingSeparator(i: number, close: number): boolean {
-    let depth = 0
-    for (let k = i + 1; k < close; k++) {
-      const tk = this.#st.tokens[k]
-      if (tk.type === 'operator' && OPENERS.has(tk.text)) depth++
-      else if (tk.type === 'operator' && CLOSERS.has(tk.text)) depth--
-      else if (depth === 0 && (tk.text === ',' || tk.text === ';')) {
-        const prev = this.#st.tokens[k - 1]
-        if (newlinesBetween(prev, tk) > 0) return true
-      }
-    }
-    return false
+    return { expanded: true, hanging: true }
   }
 
   /**
