@@ -134,20 +134,20 @@ def lex:
       )
       //
         # conditionally look for end or middle of interpolated string
-      ( select($string_stack[-1] == "\\(")
-      | _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
-        ( .[1:-2]
-        | _unescape
-        | { string_middle: . }
+        ( select($string_stack[-1] == "\\(")
+        | _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
+          ( .[1:-2]
+          | _unescape
+          | { string_middle: . }
+          )
         )
-      )
-      // _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\"";
-        ( .[1:-1]
-        | _unescape
-        | { string_end: .
-          , string_stack: ($string_stack[0:-1]) } )
-      )
-      )
+        // _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\"";
+          ( .[1:-1]
+          | _unescape
+          | { string_end: .
+            , string_stack: ($string_stack[0:-1]) } )
+        )
+        )
         # match " <any non-"-or-\> or <\ + any> "
       // _re("^\"(?:[^\"\\\\]|\\\\.)*?\""; .[1:-1] | _unescape | { string: . })
       // _const("=="; { equal_equal: . })
@@ -210,8 +210,8 @@ def parse:
       ( f as [$rest, $v]
       | [$rest, $v]
       , ( $rest
-      | _f
-      )
+        | _f
+        )
       );
     ( . as $c
     | [_f]
@@ -271,7 +271,7 @@ def parse:
                   # TODO: none associativity, 1 == 2 == 3 etc, should be error
                   _op_prec_climb($next_op.prec + 1; filter)
               end
-              ) as [$rest, $t1]
+                ) as [$rest, $t1]
               | $rest
                 # TODO: better way?
                 # if functions was defined for the left side they should be
@@ -305,7 +305,7 @@ def parse:
             | f
             | .type = $type
             )
-        }
+          }
         ]
       );
 
@@ -332,7 +332,7 @@ def parse:
             | $rest
             | [ .
               , { queries: [$val]
-              }
+                }
               ]
             );
           (
@@ -351,38 +351,38 @@ def parse:
             //
             # {"a"} -> {a: .a}
             # {"a": ...} -> {a: ...}
-            ( _p("string") as [$rest, $string]
-            | $rest
-            | _optional(_colon_val) as [$rest, $val]
-            | $rest
-            | [ .
-              , { key_string:
-                  { str: $string.term.str }
-                , val: $val
-                }
-              ]
-            )
-            //
+              ( _p("string") as [$rest, $string]
+              | $rest
+              | _optional(_colon_val) as [$rest, $val]
+              | $rest
+              | [ .
+                , { key_string:
+                    { str: $string.term.str }
+                  , val: $val
+                  }
+                ]
+              )
+              //
             # {$a} -> {a: $a}
-            ( _consume(.binding) as [$rest, { $binding }]
-            | [ $rest
-              , { key: $binding }
-              ]
-            )
-            //
+              ( _consume(.binding) as [$rest, { $binding }]
+              | [ $rest
+                , { key: $binding }
+                ]
+              )
+              //
             # {(...): ...} -> {...: ...}
-            ( _p("subquery") as [$rest, $query]
-            | $rest
-            | _colon_val as [$rest, $val]
-            | $rest
-            | [ .
-              , { key_query: $query
-                , val: $val
-                }
-              ]
-            )
+              ( _p("subquery") as [$rest, $query]
+              | $rest
+              | _colon_val as [$rest, $val]
+              | $rest
+              | [ .
+                , { key_query: $query
+                  , val: $val
+                  }
+                ]
+              )
           )
-        ) as [$rest, $key_vals]
+          ) as [$rest, $key_vals]
         | $rest
         | ( if .[0].rcurly then
             # keep it to make repeat finish and consumed it below
@@ -393,7 +393,7 @@ def parse:
             | [$rest, null]
             )
         end
-        ) as [$rest, $_]
+          ) as [$rest, $_]
         | [$rest, $key_vals]
         )
       ) as [$rest, $key_vals]
@@ -405,7 +405,7 @@ def parse:
             , object:
                 { key_vals: $key_vals }
             }
-        }
+          }
         ]
       );
 
@@ -419,110 +419,110 @@ def parse:
     # [pattern, ...]
     def _pattern:
       ( ( _consume(.lcurly)[0]
-      | _repeat(
-        ( ( def _colon_pattern:
-            ( _consume(.colon)[0]
-            | _p("pattern") as [$rest, $pattern]
-            | $rest
-            | [ .
-              , $pattern
-              ]
-            );
-          (
-            # {a} -> {a: .a}
-            # {a: ...} -> {a: ...}
-            ( _consume(.ident) as [$rest, { $ident }]
-            | $rest
-            | _optional(_colon_pattern) as [$rest, $val]
-            | $rest
-            | [ .
-              , { key: $ident
-                , val: $val
-                }
-              ]
+        | _repeat(
+          ( ( def _colon_pattern:
+              ( _consume(.colon)[0]
+              | _p("pattern") as [$rest, $pattern]
+              | $rest
+              | [ .
+                , $pattern
+                ]
+              );
+            (
+              # {a} -> {a: .a}
+              # {a: ...} -> {a: ...}
+              ( _consume(.ident) as [$rest, { $ident }]
+              | $rest
+              | _optional(_colon_pattern) as [$rest, $val]
+              | $rest
+              | [ .
+                , { key: $ident
+                  , val: $val
+                  }
+                ]
+              )
+              //
+              # {"a"} -> {a: .a}
+              # {"a": ...} -> {a: ...}
+                ( _p("string") as [$rest, $string]
+                | $rest
+                | _optional(_colon_pattern) as [$rest, $val]
+                | $rest
+                | [ .
+                  , { key_string:
+                      { str: $string.term.str }
+                    , val: $val
+                    }
+                  ]
+                )
+                //
+              # {$a} -> {a: $a}
+                ( _consume(.binding) as [$rest, { $binding }]
+                | [ $rest
+                  , { key: $binding }
+                  ]
+                )
+                //
+              # {(...): ...} -> {...: ...}
+                ( _p("subquery") as [$rest, $query]
+                | $rest
+                | _colon_pattern as [$rest, $val]
+                | $rest
+                | [ .
+                  , { key_query: $query
+                    , val: $val
+                    }
+                  ]
+                )
             )
-            //
-            # {"a"} -> {a: .a}
-            # {"a": ...} -> {a: ...}
-            ( _p("string") as [$rest, $string]
-            | $rest
-            | _optional(_colon_pattern) as [$rest, $val]
-            | $rest
-            | [ .
-              , { key_string:
-                  { str: $string.term.str }
-                , val: $val
-                }
-              ]
-            )
-            //
-            # {$a} -> {a: $a}
-            ( _consume(.binding) as [$rest, { $binding }]
-            | [ $rest
-              , { key: $binding }
-              ]
-            )
-            //
-            # {(...): ...} -> {...: ...}
-            ( _p("subquery") as [$rest, $query]
-            | $rest
-            | _colon_pattern as [$rest, $val]
-            | $rest
-            | [ .
-              , { key_query: $query
-                , val: $val
-                }
-              ]
-            )
+            ) as [$rest, $key_patterns]
+          | $rest
+          | ( if .[0].rcurly then
+              # keep it to make repeat finish and consumed it below
+              [$rest, null]
+          else
+              # or there must be a comma
+              ( _consume(.comma) as [$rest, $_]
+              | [$rest, null]
+              )
+          end
+            ) as [$rest, $_]
+          | [$rest, $key_patterns]
           )
         ) as [$rest, $key_patterns]
         | $rest
-        | ( if .[0].rcurly then
-            # keep it to make repeat finish and consumed it below
-            [$rest, null]
-        else
-            # or there must be a comma
+        | _consume(.rcurly) as [$rest, $_]
+        | [ $rest
+          , { object: $key_patterns }
+          ]
+        )
+      //
+        ( _consume(.lsquare) as [$rest, $_]
+        | $rest
+        | _repeat(
+          ( _p("pattern") as [$rest, $pattern]
+          | $rest
+          | _optional(
+            # TODO: _one() etc?
             ( _consume(.comma) as [$rest, $_]
             | [$rest, null]
             )
-        end
-        ) as [$rest, $_]
-        | [$rest, $key_patterns]
-        )
-      ) as [$rest, $key_patterns]
-      | $rest
-      | _consume(.rcurly) as [$rest, $_]
-      | [ $rest
-        , { object: $key_patterns }
-        ]
-      )
-      //
-      ( _consume(.lsquare) as [$rest, $_]
-      | $rest
-      | _repeat(
-        ( _p("pattern") as [$rest, $pattern]
-        | $rest
-        | _optional(
-          # TODO: _one() etc?
-          ( _consume(.comma) as [$rest, $_]
-          | [$rest, null]
+          ) as [$rest, $_]
+          | [$rest, $pattern]
           )
-        ) as [$rest, $_]
-        | [$rest, $pattern]
+        ) as [$rest, $pattern]
+        | $rest
+        | _consume(.rsquare) as [$rest, $_]
+        | [ $rest
+          , { array: $pattern }
+          ]
         )
-      ) as [$rest, $pattern]
-      | $rest
-      | _consume(.rsquare) as [$rest, $_]
-      | [ $rest
-        , { array: $pattern }
-        ]
-      )
       //
-      ( _consume(.binding) as [$rest, { $binding }]
-      | [ $rest
-        , { name: $binding }
-        ]
-      )
+        ( _consume(.binding) as [$rest, { $binding }]
+        | [ $rest
+          , { name: $binding }
+          ]
+        )
       );
 
     # (<query>)
@@ -536,7 +536,7 @@ def parse:
             { type: "TermTypeQuery"
             , query: $query
             }
-        }
+          }
         ]
       );
 
@@ -546,40 +546,40 @@ def parse:
       ( _consume(.ident) as [$rest, { $ident }]
       | $rest
       | ( _consume(.lparen)[0]
-      | _repeat(
-        ( _p("query") as [$rest, $arg]
-        | $rest
-        | _optional(
-          # TODO: _one() etc?
-          ( _consume(.semicolon) as [$rest, $_]
-          | [$rest, null]
+        | _repeat(
+          ( _p("query") as [$rest, $arg]
+          | $rest
+          | _optional(
+            # TODO: _one() etc?
+            ( _consume(.semicolon) as [$rest, $_]
+            | [$rest, null]
+            )
+          ) as [$rest, $_]
+          | [$rest, $arg]
           )
-        ) as [$rest, $_]
-        | [$rest, $arg]
+        ) as [$rest, $args]
+        | $rest
+        | _consume(.rparen)[0]
+        | [ .
+          , { term:
+              { type: "TermTypeFunc"
+              , func:
+                  { name: $ident
+                  , args: $args
+                  }
+              }
+            }
+          ]
         )
-      ) as [$rest, $args]
-      | $rest
-      | _consume(.rparen)[0]
-      | [ .
+      //
+        [ .
         , { term:
             { type: "TermTypeFunc"
             , func:
-                { name: $ident
-                , args: $args
-                }
+                { name: $ident }
             }
-        }
-        ]
-      )
-      //
-      [ .
-      , { term:
-          { type: "TermTypeFunc"
-          , func:
-              { name: $ident }
           }
-      }
-      ]
+        ]
       );
 
     # $name
@@ -591,7 +591,7 @@ def parse:
             , func:
                 { name: $binding }
             }
-        }
+          }
         ]
       );
 
@@ -607,7 +607,7 @@ def parse:
             , array:
                 { query: $query }
             }
-        }
+          }
         ]
       );
 
@@ -636,7 +636,7 @@ def parse:
                 , update: $update
                 }
             }
-        }
+          }
         ]
       );
 
@@ -675,7 +675,7 @@ def parse:
                 | if $extract then .extract = $extract else . end
                 )
             }
-        }
+          }
         ]
       );
 
@@ -725,7 +725,7 @@ def parse:
                 end
                 )
             }
-        }
+          }
         ]
       );
 
@@ -736,52 +736,52 @@ def parse:
       _repeat(
         ( _keyword("def")
         | ( _consume(.at_ident)
-        // _consume(.ident)
-        ) as [$rest, $tok]
+          // _consume(.ident)
+          ) as [$rest, $tok]
         | ($tok.ident // $tok.at_ident) as $name
         | $rest
         | ( ( _consume(.lparen)[0]
-        | _repeat(
-          ( ( ( _consume(.ident) as [$rest, { $ident }]
-          | [$rest, $ident]
-          )
+            | _repeat(
+              ( ( ( _consume(.ident) as [$rest, { $ident }]
+                  | [$rest, $ident]
+                  )
+                //
+                  ( _consume(.binding) as [$rest, { $binding }]
+                  | [$rest, $binding]
+                  )
+                ) as [$rest, $arg]
+              | $rest
+              | ( _consume(.semicolon)[0]
+                // .
+                )
+              | [., $arg]
+              )
+            ) as [$rest, $args]
+            | $rest
+            | _consume(.rparen)[0]
+            | _consume(.colon)[0]
+            | _p("query") as [$rest, $body]
+            | $rest
+            | _consume(.semicolon) as [$rest, $_]
+            | [ $rest
+              , { name: $name
+                , args: $args
+                , body: $body
+                }
+              ]
+            )
           //
-          ( _consume(.binding) as [$rest, { $binding }]
-          | [$rest, $binding]
+            ( _consume(.colon)[0]
+            | _p("query") as [$rest, $body]
+            | $rest
+            | _consume(.semicolon) as [$rest, $_]
+            | [ $rest
+              , { name: $name
+                , body: $body
+                }
+              ]
+            )
           )
-          ) as [$rest, $arg]
-          | $rest
-          | ( _consume(.semicolon)[0]
-          // .
-          )
-          | [., $arg]
-          )
-        ) as [$rest, $args]
-        | $rest
-        | _consume(.rparen)[0]
-        | _consume(.colon)[0]
-        | _p("query") as [$rest, $body]
-        | $rest
-        | _consume(.semicolon) as [$rest, $_]
-        | [ $rest
-          , { name: $name
-            , args: $args
-            , body: $body
-            }
-          ]
-        )
-        //
-        ( _consume(.colon)[0]
-        | _p("query") as [$rest, $body]
-        | $rest
-        | _consume(.semicolon) as [$rest, $_]
-        | [ $rest
-          , { name: $name
-            , body: $body
-            }
-          ]
-        )
-        )
         )
       );
 
@@ -809,89 +809,89 @@ def parse:
         )
         //
         # [...] query
-        ( _optional(
-          # TODO: _one() etc?
-          ( _consume(.dot) as [$rest, $_]
-          | [$rest, null]
+          ( _optional(
+            # TODO: _one() etc?
+            ( _consume(.dot) as [$rest, $_]
+            | [$rest, null]
+            )
+          ) as [$rest, $_]
+          | $rest
+          | _consume(.lsquare)[0]
+          | _p("query") as [$rest, $start]
+          | $rest
+          | _consume(.rsquare) as [$rest, $_]
+          | [ $rest
+            , { index:
+                { start: $start }
+              }
+            ]
           )
-        ) as [$rest, $_]
-        | $rest
-        | _consume(.lsquare)[0]
-        | _p("query") as [$rest, $start]
-        | $rest
-        | _consume(.rsquare) as [$rest, $_]
-        | [ $rest
-          , { index:
-              { start: $start }
-          }
-          ]
-        )
-        //
+          //
         # [...:...]
         # [:...]
         # [...:]
-        ( _consume(.lsquare)[0]
-        | _optional(_p("query")) as [$rest, $start]
-        | $rest
-        | _consume(.colon)[0]
-        | _optional(_p("query")) as [$rest, $end_]
-        | $rest
-        | _consume(.rsquare)[0]
-          # fail if both missing
-        | if $start == null and $end_ == null then empty end
-        | [ .
-          , { index:
-              ( { is_slice: true }
-              | if $start then .start = $start else . end
-              | if $end_ then . end = $end_ else . end
-              )
-          }
-          ]
-        )
-        //
+          ( _consume(.lsquare)[0]
+          | _optional(_p("query")) as [$rest, $start]
+          | $rest
+          | _consume(.colon)[0]
+          | _optional(_p("query")) as [$rest, $end_]
+          | $rest
+          | _consume(.rsquare)[0]
+            # fail if both missing
+          | if $start == null and $end_ == null then empty end
+          | [ .
+            , { index:
+                ( { is_slice: true }
+                | if $start then .start = $start else . end
+                | if $end_ then . end = $end_ else . end
+                )
+              }
+            ]
+          )
+          //
         # .name index
-        ( _consume(.index) as [$rest, { $index }]
-        | [ $rest
-          , { index:
-              { name: $index }
-          }
-          ]
-        )
-        //
+          ( _consume(.index) as [$rest, { $index }]
+          | [ $rest
+            , { index:
+                { name: $index }
+              }
+            ]
+          )
+          //
         # ."name" index
-        ( _consume(.dot)[0]
-        | _p("string") as [$rest, $string]
-        | $rest
-        | [ .
-          , { index:
-              { str:
-                  { str: $string.term.str }
+          ( _consume(.dot)[0]
+          | _p("string") as [$rest, $string]
+          | $rest
+          | [ .
+            , { index:
+                { str:
+                    { str: $string.term.str }
+                }
               }
-          }
-          ]
-        )
-        //
+            ]
+          )
+          //
         # ? optional (try)
-        ( _consume(.qmark) as [$rest, $_]
-        | [ $rest
-          , { optional: true }
-          ]
-        )
-        //
-        ( _keyword("as")
-        | _p("pattern") as [$rest, $pattern]
-        | $rest
-        | _consume(.pipe)[0]
-        | _p("query") as [$rest, $body]
-        | $rest
-        | [ .
-          , { bind:
-              { body: $body
-              , patterns: [$pattern]
-              }
-          }
-          ]
-        )
+          ( _consume(.qmark) as [$rest, $_]
+          | [ $rest
+            , { optional: true }
+            ]
+          )
+          //
+            ( _keyword("as")
+            | _p("pattern") as [$rest, $pattern]
+            | $rest
+            | _consume(.pipe)[0]
+            | _p("query") as [$rest, $body]
+            | $rest
+            | [ .
+              , { bind:
+                  { body: $body
+                  , patterns: [$pattern]
+                  }
+                }
+              ]
+            )
       );
 
     # .
@@ -900,7 +900,7 @@ def parse:
       | [ $rest
         , { term:
             { type: "TermTypeIdentity" }
-        }
+          }
         ]
       );
 
@@ -911,69 +911,69 @@ def parse:
     # TODO: share with _suffix? tricky because of leading dot
     def _index:
       ( ( _consume(.dot)[0]
-      | _consume(.lsquare)[0]
-      | _p("query") as [$rest, $query]
-      | $rest
-      | _consume(.rsquare) as [$rest, $_]
-      | [ $rest
-        , { term:
-            { type: "TermTypeIndex"
-            , index:
-                { start: $query }
+        | _consume(.lsquare)[0]
+        | _p("query") as [$rest, $query]
+        | $rest
+        | _consume(.rsquare) as [$rest, $_]
+        | [ $rest
+          , { term:
+              { type: "TermTypeIndex"
+              , index:
+                  { start: $query }
+              }
             }
-        }
-        ]
-      )
+          ]
+        )
       //
-      ( _consume(.dot)[0]
-      | _consume(.lsquare)[0]
-      | _optional(_p("query")) as [$rest, $start]
-      | $rest
-      | _consume(.colon)[0]
-      | _optional(_p("query")) as [$rest, $end_]
-      | $rest
-      | _consume(.rsquare)[0]
-        # fail is both missing
-      | if $start == null and $end_ == null then empty else . end
-      | [ .
-        , { term:
-            { type: "TermTypeIndex"
-            , index:
-                ( { is_slice: true }
-                | if $start then .start = $start else . end
-                | if $end_ then . end = $end_ else . end
-                )
+        ( _consume(.dot)[0]
+        | _consume(.lsquare)[0]
+        | _optional(_p("query")) as [$rest, $start]
+        | $rest
+        | _consume(.colon)[0]
+        | _optional(_p("query")) as [$rest, $end_]
+        | $rest
+        | _consume(.rsquare)[0]
+          # fail is both missing
+        | if $start == null and $end_ == null then empty else . end
+        | [ .
+          , { term:
+              { type: "TermTypeIndex"
+              , index:
+                  ( { is_slice: true }
+                  | if $start then .start = $start else . end
+                  | if $end_ then . end = $end_ else . end
+                  )
+              }
             }
-        }
-        ]
-      )
+          ]
+        )
       //
-      ( _consume(.index) as [$rest, { $index }]
-      | [ $rest
-        , { term:
-            { type: "TermTypeIndex"
-            , index:
-                { name: $index }
+        ( _consume(.index) as [$rest, { $index }]
+        | [ $rest
+          , { term:
+              { type: "TermTypeIndex"
+              , index:
+                  { name: $index }
+              }
             }
-        }
-        ]
-      )
+          ]
+        )
       //
         # ."name" index
-      ( _consume(.dot)[0]
-      | _p("string") as [$rest, $string]
-      | $rest
-      | [ .
-        , { term:
-            { type: "TermTypeIndex"
-            , index:
-                { str:
-                    { str: $string.term.str }
-                }
+        ( _consume(.dot)[0]
+        | _p("string") as [$rest, $string]
+        | $rest
+        | [ .
+          , { term:
+              { type: "TermTypeIndex"
+              , index:
+                  { str:
+                      { str: $string.term.str }
+                  }
+              }
             }
-        }
-        ]
-      )
+          ]
+        )
       );
 
     # "abc"
@@ -998,14 +998,14 @@ def parse:
             , queries:
                 [ { term: { str: $string_start, type: "TermTypeString" } }
                 , ( $queries[]
-                | if .term and .term.type == "TermTypeString" then .
-                else { term: { query: ., type: "TermTypeQuery" } }
-                end
-                )
+                  | if .term and .term.type == "TermTypeString" then .
+                  else { term: { query: ., type: "TermTypeQuery" } }
+                  end
+                  )
                 , { term: { str: $string_end, type: "TermTypeString" } }
                 ]
             }
-        }
+          }
         ]
       );
 
@@ -1025,7 +1025,7 @@ def parse:
             , format: $at_ident
             , str: $string
             }
-        }
+          }
         ]
       );
 
@@ -1050,7 +1050,7 @@ def parse:
                 | if $catch_ then . catch = $catch_ else . end
                 )
             }
-        }
+          }
         ]
       );
 
@@ -1070,7 +1070,7 @@ def parse:
                 , ident: $binding
                 }
             }
-        }
+          }
         ]
       );
 
@@ -1084,7 +1084,7 @@ def parse:
             { type: "TermTypeBreak"
             , break: $binding
             }
-        }
+          }
         ]
       );
 
@@ -1101,7 +1101,7 @@ def parse:
                 , term: $term.term
                 }
             }
-        }
+          }
         ]
       );
 
@@ -1115,7 +1115,7 @@ def parse:
             , func:
                 { name: "recurse" }
             }
-        }
+          }
         ]
       );
 
@@ -1141,38 +1141,38 @@ def parse:
     elif $type == "term" then
         # "keyword" ident parsing first
         ( ( _p("if")
-        // _p("reduce")
-        // _p("foreach")
-        // _p("try")
-        // _p("label")
-        // _p("break")
-        // _p("true")
-        // _p("false")
-        // _p("null")
-        // _p("func")
-        // _p("number")
-        // _p("string")
-        // _p("format_string")
-        // _p("array")
-        // _p("subquery") # TODO: rename?
-        // _p("object")
-        // _p("index") #.name
-        // _p("identity") # .
-        // _p("binding")
-        // _p("unary_plus")
-        // _p("unary_minus")
-        // _p("recurse") # ".."
-        ) as [$rest, $term]
+          // _p("reduce")
+          // _p("foreach")
+          // _p("try")
+          // _p("label")
+          // _p("break")
+          // _p("true")
+          // _p("false")
+          // _p("null")
+          // _p("func")
+          // _p("number")
+          // _p("string")
+          // _p("format_string")
+          // _p("array")
+          // _p("subquery") # TODO: rename?
+          // _p("object")
+          // _p("index") #.name
+          // _p("identity") # .
+          // _p("binding")
+          // _p("unary_plus")
+          // _p("unary_minus")
+          // _p("recurse") # ".."
+          ) as [$rest, $term]
         | $rest
         | _repeat(_p("suffix")) as [$rest, $suffix_list]
         | $rest
         | [ .
           , ( $term
-          | if ($suffix_list | length) > 0 then
+            | if ($suffix_list | length) > 0 then
               .term.suffix_list = $suffix_list
-          else .
-          end
-          )
+            else .
+            end
+            )
           ]
         )
     elif $type == "suffix" then _suffix
@@ -1204,10 +1204,10 @@ def parse:
     end
     );
   ( ( map(select((.whitespace or .comment) | not))
-  | _p("query")
-  | if .[0] != [] then error("tokens left: \(.)") else . end
-  | .[1]
-  )
+    | _p("query")
+    | if .[0] != [] then error("tokens left: \(.)") else . end
+    | .[1]
+    )
   // error("parse error: \(.)")
   );
 
@@ -1230,7 +1230,7 @@ def _tojson_stream($opts):
   elif $opts.indent == "tab" then ["\t", " ", "\n"]
   else [$opts.indent * " ", " ", "\n"]
   end
-  ) as [$indent, $space, $newline]
+    ) as [$indent, $space, $newline]
   |
     def _f($prefix):
       ( type as $t
@@ -1248,7 +1248,7 @@ def _tojson_stream($opts):
             | ("[" | _color(_c_array))
             , $elem_prefix, (.[0] | _f($elem_prefix))
             , ( .[1:][]
-            | ("," | _color(_c_array))
+              | ("," | _color(_c_array))
               , $elem_prefix, _f($elem_prefix)
               )
             , $prefix, ("]" | _color(_c_array))
@@ -1261,13 +1261,13 @@ def _tojson_stream($opts):
             | to_entries as $entries
             | ("{" | _color(_c_object))
             , ( $entries[0]
-            | $elem_prefix
+              | $elem_prefix
               , (.key | tojson | _color(_c_field))
               , (":" | _color(_c_object)), $space
               , (.value | _f($elem_prefix))
               )
             , ( $entries[1:][]
-            | ("," | _color(_c_object))
+              | ("," | _color(_c_object))
               , $elem_prefix
               , (.key | tojson | _color(_c_field))
               , (":" | _color(_c_object)), $space
@@ -1317,7 +1317,7 @@ def func_defs_to_env($env):
         ( $f
         | .env = $func_env
         )
-    }
+      }
     )
   );
 
@@ -1356,9 +1356,9 @@ def eval_ast($query; $path; $env; undefined_func):
                 , $func_defs
                 }
     | ( ( ($func_defs // [])
-    | func_defs_to_env($env)
-    )
-    ) as $query_env
+        | func_defs_to_env($env)
+        )
+      ) as $query_env
     |
       # eval a index, is also used by _e_suffix
       def _e_index($index; $query_path; $query_input; $opt):
@@ -1368,32 +1368,32 @@ def eval_ast($query; $path; $env; undefined_func):
                         , $start
                         , end: $end_
                         }
-        | . as $input
-        | if $name then [($query_path + [$name]), $input[$name]]
-        elif $str then [($query_path + [$str.str]), $input[$str.str]]
-        elif $is_slice then
-            ( $query_input
-            | ( if $start then _e($start; []; $query_env; $label_count)[1]
-            else 0 end
-            ) as $vs
-            | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
-            else $input | length
+            | . as $input
+            | if $name then [($query_path + [$name]), $input[$name]]
+            elif $str then [($query_path + [$str.str]), $input[$str.str]]
+            elif $is_slice then
+              ( $query_input
+              | ( if $start then _e($start; []; $query_env; $label_count)[1]
+              else 0 end
+                ) as $vs
+              | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
+              else $input | length
+              end
+                ) as $ve
+              | [ [null]
+                , $input[$vs:$ve]
+                ]
+              )
+            elif $start then
+              ( $query_input
+              | _e($start; []; $query_env; $label_count) as [$_, $v]
+              | [ ($query_path + [$v])
+                , $input[$v]
+                ]
+              )
+            else . # TODO: error?
             end
-            ) as $ve
-            | [ [null]
-              , $input[$vs:$ve]
-              ]
             )
-        elif $start then
-            ( $query_input
-            | _e($start; []; $query_env; $label_count) as [$_, $v]
-            | [ ($query_path + [$v])
-              , $input[$v]
-              ]
-            )
-        else . # TODO: error?
-        end
-        )
         catch
           if $opt then empty
           else error
@@ -1429,7 +1429,7 @@ def eval_ast($query; $path; $env; undefined_func):
                     )
                 else .
                 end
-                ) as $v
+                  ) as $v
                 | $rest
                 | _f($str_parts + [$v])
                 )
@@ -1483,7 +1483,7 @@ def eval_ast($query; $path; $env; undefined_func):
                       )
                   else _internal_error("unreachable")
                   end
-                  ) as [$key, $val]
+                    ) as [$key, $val]
                   | $val
                   | _f($input[$key]; $env)
                   )
@@ -1546,28 +1546,28 @@ def eval_ast($query; $path; $env; undefined_func):
             ( ($e.args // []) as $func_args
             | ($args // []) as $call_args
             | ( $func_args
-            | with_entries(
-              ( ( .value
-                # when using a $<name> binding arg <name> is also available as a lambda
-              | if startswith("$") then .[1:] else . end
-              ) as $name
-              | { key: ($name + "/0")
-                , value:
-                  { body: $call_args[.key]
-                    # save current env
-                  , env: $query_env
-                  , lambda: true
+              | with_entries(
+                ( ( .value
+                  # when using a $<name> binding arg <name> is also available as a lambda
+                  | if startswith("$") then .[1:] else . end
+                  ) as $name
+                | { key: ($name + "/0")
+                  , value:
+                    { body: $call_args[.key]
+                      # save current env
+                    , env: $query_env
+                    , lambda: true
+                    }
                   }
-                }
+                )
               )
-            )
-            ) as $lambda_env
+              ) as $lambda_env
               # if not lambda inject the function in it's own env to allow recursion
               # TODO: find a better way
             | ( if $e.lambda then {}
             else { ($name): $e }
             end
-            ) as $self_env
+              ) as $self_env
             | $func_args
             | to_entries
             | map(
@@ -1747,42 +1747,42 @@ def eval_ast($query; $path; $env; undefined_func):
             . as $kv
               | if $kv.key then
                 [ ( $kv.key
-                | if startswith("$") then .[1:] else . end
-                | _term_str
-                )
+                  | if startswith("$") then .[1:] else . end
+                  | _term_str
+                  )
                 , ( $kv.val.queries[0]
-                //
-                ( $kv.key
-                | if startswith("$") then
-                    { term:
-                        { type: "TermTypeFunc"
-                        , func: { name: . }
+                  //
+                    ( $kv.key
+                    | if startswith("$") then
+                        { term:
+                            { type: "TermTypeFunc"
+                            , func: { name: . }
+                            }
                         }
-                    }
-                else
-                    { term:
-                        { type: "TermTypeIndex"
-                        , index: { name: . }
+                    else
+                        { term:
+                            { type: "TermTypeIndex"
+                            , index: { name: . }
+                            }
                         }
-                    }
-                end
-                )
-                )
+                    end
+                    )
+                  )
                 ]
               elif $kv.key_string then
                 ( [ ( $kv.key_string.str
-                | _term_str
-                )
+                    | _term_str
+                    )
                   , ( $kv.val.queries[0]
-                  //
-                  { term:
-                      { type: "TermTypeIndex"
-                      , index:
-                          { name: $kv.key_string.str
+                    //
+                      { term:
+                          { type: "TermTypeIndex"
+                          , index:
+                              { name: $kv.key_string.str
+                              }
                           }
                       }
-                  }
-                  )
+                    )
                   ]
                 )
               elif $kv.key_query then
@@ -1814,8 +1814,8 @@ def eval_ast($query; $path; $env; undefined_func):
         [ [null]
           # .query only set if there was a query
         , [ _e($query.term.array.query // empty; []; $query_env; $label_count) as [$_, $v]
-        | $v
-        ]
+          | $v
+          ]
         ];
 
       # transform into array of [<cond>, <then>] ast pairs and fill in last else.
@@ -1830,8 +1830,8 @@ def eval_ast($query; $path; $env; undefined_func):
           ]
           # [elif <cond> then <then>]*
           , ( $if_. elif []?
-          | [.cond, . then]
-          )
+            | [.cond, . then]
+            )
           , if $if_. else then
             # else <then> end -> else true then <then> end
             [ { term: { type: "TermTypeTrue" } }
@@ -1849,8 +1849,8 @@ def eval_ast($query; $path; $env; undefined_func):
             # does not have base case as we know last else will be true
             ( .[0] as [$cond, $then_]
             | ( $input
-            | _e($cond; $path; $query_env; $label_count)
-            ) as [$_, $v]
+              | _e($cond; $path; $query_env; $label_count)
+              ) as [$_, $v]
             | if $v then
                 ( $input
                 | _e($then_; $path; $query_env; $label_count)
@@ -1889,11 +1889,11 @@ def eval_ast($query; $path; $env; undefined_func):
                                   , extract: $extract
                                   }
         | ( $extract
-        //
-        { term:
-            { type: "TermTypeIdentity" }
-        }
-        ) as $extract
+          //
+            { term:
+                { type: "TermTypeIdentity" }
+            }
+          ) as $extract
         | _e($start; $path; $query_env; $label_count) as [$start_path, $start_v]
         | foreach _e({ term: $term }; $path; $query_env; $label_count) as [$_, $v] (
           [$start_path, $start_v];
@@ -1911,16 +1911,16 @@ def eval_ast($query; $path; $env; undefined_func):
       def _try:
         ( $query.term. try as { $body, catch: $catch_ }
         | ( $catch_
-        //
-        { term:
-            { type: "TermTypeFunc"
-            , func:
-                { name: "empty"
+          //
+            { term:
+                { type: "TermTypeFunc"
+                , func:
+                    { name: "empty"
+                    }
+                ,
                 }
-            ,
             }
-        }
-        ) as $catch_
+          ) as $catch_
           # TODO: will catch jqjq bugs causing error
           # do own backtracking? sentinel value somehow?
         | try _e($body; $path; $query_env; $label_count)
@@ -1986,8 +1986,8 @@ def eval_ast($query; $path; $env; undefined_func):
         elif $suffix.index then
             # .<index>
             try ( $v
-            | _e_index($suffix.index; $p; $input; $opt)
-            )
+                | _e_index($suffix.index; $p; $input; $opt)
+                )
             catch
               # TODO: share optional code somehow below and in _e_index
               if $opt then empty
@@ -1996,9 +1996,9 @@ def eval_ast($query; $path; $env; undefined_func):
         elif $suffix.iter then
             # .[]
             try ( $v
-            | keys[] as $key
-            | [($p + [$key]), $v[$key]]
-            )
+                | keys[] as $key
+                | [($p + [$key]), $v[$key]]
+                )
             catch
               if $opt then empty
               else error
@@ -2116,7 +2116,7 @@ def eval_ast($query; $path; $env; undefined_func):
                               { type: "TermTypeString"
                               , str: $op
                               }
-                          }
+                            }
                           , $right
                           ]
                       }
@@ -2599,11 +2599,11 @@ def ascii_downcase: _ascii_map(65; 90; .+32);
 
 def _builtins_env:
   try ( _builtins_src
-  | lex
-  | parse
-  | .func_defs
-  | func_defs_to_env({})
-  )
+      | lex
+      | parse
+      | .func_defs
+      | func_defs_to_env({})
+      )
   catch
     error("builtins: \(.)");
 
@@ -2737,12 +2737,12 @@ def parse_options:
       "--indent takes one parameter" | die
     else
       try ( (.args.rest[0] | tonumber) as $indent
-      | .args.rest = .args.rest[1:]
+          | .args.rest = .args.rest[1:]
         # allow indentation over 7 spaces, unlike jq
-      | if $indent | . != trunc or . < -1 then error end
-      | .indent = ($indent | if . == -1 then "tab" end)
-      | .print_pretty = true
-      )
+          | if $indent | . != trunc or . < -1 then error end
+          | .indent = ($indent | if . == -1 then "tab" end)
+          | .print_pretty = true
+          )
       catch
         ("--indent takes a number or -1 for tab" | die)
     end;
@@ -2808,9 +2808,9 @@ def parse_options:
     // option(null; "parse"; .mode = "parse")
     // option(null; "no-builtins"; .no_builtins = true)
     //
-    ( if .args.is_short then "-\(.args.curr[:1])" else "--\(.args.curr)" end
-    | "Unknown option: \(.)" | die
-    )
+      ( if .args.is_short then "-\(.args.curr[:1])" else "--\(.args.curr)" end
+      | "Unknown option: \(.)" | die
+      )
     );
   def parse_options_in_arg:
     ( parse_option
@@ -2881,9 +2881,9 @@ def construct_jqjq_command:
         , .files[]?
         , (.program_args.named[]? | select(.type | . == "rawfile" or . == "slurpfile").value)
         ]
-    | unique[]
-    | "--rawfile", "file:\(sh_escape)", sh_escape
-    )
+      | unique[]
+      | "--rawfile", "file:\(sh_escape)", sh_escape
+      )
     , "--args", "--", ($args[] | sh_escape)
     ]
   | join(" ")
@@ -2967,21 +2967,21 @@ def jqjq($args; $env):
     | ( if $opts.no_builtins then {}
     else _builtins_env
     end
-    ) as $builtins_env
+      ) as $builtins_env
     | _repeat_break(
       ( "> "
       , ( try input
       catch error("break")
-      | . as $expr
-      | null
-      | try ( ( eval($expr; { "$ENV": $env }; $builtins_env)
-      | dump($opts)
-      )
-            , if $opts.raw_no_lf then "\n" else empty end
-            )
-      catch
+        | . as $expr
+        | null
+        | try ( ( eval($expr; { "$ENV": $env }; $builtins_env)
+                | dump($opts)
+                )
+              , if $opts.raw_no_lf then "\n" else empty end
+              )
+        catch
           "error: \(.)\n"
-      )
+        )
       )
     )
     , "\n" # input interrupted so no line entered
@@ -3068,27 +3068,27 @@ def jqjq($args; $env):
       | "line \(.line): \(.input | tojson) | \(.expr) -> \(.output | _to_unslurped)" as $test_name
       | . as $test
       | try ( ($test.expr | lex | parse) as $ast
-      | $test.input
-      | [ eval_ast(
-        $ast;
-        [];
-        $builtins_env;
-        builtin_undefined_func({ "$ENV": { "jqjq": 123 } }; $builtins_env)
-      ) as [$_path, $value]
-      | $value
-      ] as $actual_output
-      | if $test.output == $actual_output then
-          ( "OK: \($test_name)"
-          , { ok: true }
-          )
-      else
-          ( "DIFF: \($test_name)"
-          , "  Expected: \($test.output | _to_unslurped)"
-          , "    Actual: \($actual_output | _to_unslurped)"
-          , { error: true }
-          )
-      end
-      )
+            | $test.input
+            | [ eval_ast(
+              $ast;
+              [];
+              $builtins_env;
+              builtin_undefined_func({ "$ENV": { "jqjq": 123 } }; $builtins_env)
+            ) as [$_path, $value]
+              | $value
+              ] as $actual_output
+            | if $test.output == $actual_output then
+              ( "OK: \($test_name)"
+              , { ok: true }
+              )
+            else
+              ( "DIFF: \($test_name)"
+              , "  Expected: \($test.output | _to_unslurped)"
+              , "    Actual: \($actual_output | _to_unslurped)"
+              , { error: true }
+              )
+            end
+            )
       catch
           if $test.fail then
             if . == $test.error then
@@ -3145,14 +3145,14 @@ def jqjq($args; $env):
         end;
       _parse_opts($opts; $env) as $opts
         | ( $opts.program_args.named | with_entries(.key |= ("$" + .))
-        + { "$ENV": $env # $ENV has precedence over args
-          , "$ARGS": $opts.program_args
-          }
-        ) as $globals
+          + { "$ENV": $env # $ENV has precedence over args
+            , "$ARGS": $opts.program_args
+            }
+          ) as $globals
         | ( if $opts.no_builtins then {}
         else _builtins_env
         end
-        ) as $builtins_env
+          ) as $builtins_env
         | _inputs
         | eval($opts.program; $globals; $builtins_env)
         | dump($opts)

@@ -47,10 +47,15 @@ interface GroupCtx {
   alignCol: number
   /**
    * 组内顶层分隔符是否采用前导风格（源码在某个 ','/';' 之前换行）。
-   * 前导风格的悬挂组闭括号也回到开括号所在列；普通悬挂组的闭括号
-   * 回到开括号所在行的行首（与行首双目运算符的层级一致）。
+   * 前导分隔符与悬挂组的闭括号都对齐到开括号所在列（见 alignCol）。
    */
   leadSep: boolean
+  /**
+   * 开括号与前一个 token 粘连（调用语法 'f('，无空格）：闭括号与
+   * 运算链回到开括号所在行的行首而非开括号列 —— 调用的括号与函数名
+   * 是一个整体，视觉锚点是行首（语料 _re( … ) 的形态）。
+   */
+  callLike: boolean
   /**
    * 组内是否已出现顶层 ','/';'（发射顺序记账）。悬挂组里开括号行上
    * 挂下来的运算符链与开括号竖向对齐；一旦出现顶层分隔符，后续的
@@ -108,6 +113,8 @@ export class Layout {
   #prevReal: FmtToken | undefined
   /** prevReal 在 token 流中的下标（-1 = 还没有）；跳过注释 */
   #prevRealIdx = -1
+  /** prevReal 是否由断行开始、独占一行（行首风格的运算符） */
+  #prevRealLead = false
   /** 上一个已发射内容（代码 token 或注释）的结束行号 */
   #lastAnyEndLine = -1
 
@@ -172,6 +179,7 @@ export class Layout {
       this.#updateContexts(t, i)
       this.#prevReal = t
       this.#prevRealIdx = i
+      this.#prevRealLead = d.indent !== null
       this.#lastAnyEndLine = endLine(t)
     }
     if (this.#out.hasContent) this.#out.finishLine()
@@ -198,11 +206,25 @@ export class Layout {
 
   /**
    * 悬挂组内、尚未出现顶层分隔符时，挂在开括号行上的运算符链与
-   * 开括号所在行的行首竖向对齐（开括号在行首时即与开括号同列）；
-   * 其余情况返回 null，走各断点自己的常规缩进。
+   * 开括号所在列竖向对齐（前导分隔符与悬挂闭括号也是这一列）；
+   * 调用式开括号（'f('，粘连）例外，回开括号所在行的行首。其余
+   * 情况返回 null，走各断点自己的常规缩进。
    */
   #hangingChainAlign(g: GroupCtx | undefined): number | null {
-    return g?.hanging && !g.seenSep ? g.closeIndent : null
+    if (!g?.hanging || g.seenSep) return null
+    return g.callLike ? g.closeIndent : g.alignCol
+  }
+
+  /** tokens[i] 的开括号是否与前一个 token 粘连（调用语法 'f('） */
+  #isCallLike(i: number): boolean {
+    const t = this.#tokens[i]
+    const p = this.#tokens[i - 1]
+    return (
+      p !== undefined &&
+      p.type === 'ident' &&
+      p.line === t.line &&
+      endCol(p) === t.col
+    )
   }
 
   #emitComment(t: FmtToken): void {
@@ -260,12 +282,15 @@ export class Layout {
         break
       }
       case 'closer':
-        // 展开组的闭括号：前导分隔符风格的悬挂组回到开括号所在列，
-        // 其余悬挂组与分隔式回到开括号所在行的行首；悬挂式且源码闭括号
-        // 未换行时，留在最后一个元素所在的行内
+        // 展开组的闭括号：悬挂组回到开括号所在列（与前导分隔符、运算
+        // 链同列；调用式 'f(' 例外，回开括号所在行的行首），分隔式
+        // 回到开括号所在行的行首；悬挂式且源码闭括号未换行时，留在
+        // 最后一个元素所在的行内
         if (innerGroup && innerGroup.expanded && !(innerGroup.hanging && nl === 0)) {
           indent =
-            innerGroup.hanging && innerGroup.leadSep ? innerGroup.alignCol : innerGroup.closeIndent
+            innerGroup.hanging && !innerGroup.callLike
+              ? innerGroup.alignCol
+              : innerGroup.closeIndent
         }
         break
       case 'binop': {
@@ -371,14 +396,16 @@ export class Layout {
           if (p.text !== 'end' && nl > 0) indent = this.#bodyIndent?.indent ?? this.#ctxIndent
           break
         case 'afterBinop':
-          // 双目运算符/管道之后（尾随风格）源码换行：操作数另起一行，
-          // 尊重源码的折行选择。缩进与对应的行首风格一致（见上方
-          // pipe / binop 两个相位 1 分支）
+          // 双目运算符/管道之后源码换行：操作数另起一行，尊重源码的
+          // 折行选择。缩进与对应的行首风格一致（见上方 pipe / binop
+          // 两个相位 1 分支）；运算符独占一行（行首风格且操作数也
+          // 换行）时操作数再深一层 —— 前后的操作数不与运算符同级
           if (nl > 0) {
-            indent =
+            const base =
               p.text === '|'
                 ? this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent + this.#opts.indentSize
                 : this.#hangingChainAlign(innerGroup) ?? this.#out.indentCols
+            indent = this.#prevRealLead ? base + this.#opts.indentSize : base
           }
           break
       }
@@ -416,7 +443,8 @@ export class Layout {
           // 开括号刚发射完毕：其起始列 = 当前行末列减去自身宽度
           alignCol: this.#out.col() - t.text.length,
           leadSep: style.leadSep,
-          seenSep: false
+          seenSep: false,
+          callLike: this.#isCallLike(i)
         })
         if (style.expanded) {
           this.#ctxIndent = this.#out.indentCols + this.#opts.indentSize

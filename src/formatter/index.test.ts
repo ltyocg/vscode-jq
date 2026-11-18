@@ -302,8 +302,10 @@ test('leading separators align with the opening bracket', () => {
   )
   // 开括号行上的行尾注释不参与宽度测量，不把组挤成分隔式
   assert.equal(fmt('[ # note\n  1\n, 2\n]'), '[ # note\n  1\n, 2\n]\n')
-  // 无前导分隔符的悬挂组：闭括号仍回到开括号所在行的行首
+  // 无前导分隔符的悬挂组：闭括号对齐到开括号列；调用式开括号
+  //（'x('，与前一个 token 粘连）例外，回到开括号所在行的行首
   assert.equal(fmt('x( "aaa"\n+ "bbb"\n)'), 'x( "aaa"\n+ "bbb"\n)\n')
+  assert.equal(fmt('[ .\n  , { a: 1\n    , b: 2\n    }\n  ]'), '[ .\n, { a: 1\n  , b: 2\n  }\n]\n')
 })
 
 test('object values break after the colon where the source does', () => {
@@ -311,7 +313,7 @@ test('object values break after the colon where the source does', () => {
   // 值比所在对象组的内容层（键所在的层）深一层 —— 悬挂组里键所在
   // 行的行首属于外层，按行首算会让值与开括号平级
   assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n    value\n}\n')
-  assert.equal(fmt('[ { a:\n    1\n}\n]'), '[ { a:\n    1\n}\n]\n')
+  assert.equal(fmt('[ { a:\n    1\n}\n]'), '[ { a:\n    1\n  }\n]\n')
   // 冒号后源码未换行：值留在本行
   assert.equal(fmt('{ a: 1,\n  b: 2\n}'), '{ a: 1,\n  b: 2\n}\n')
   // 切片冒号不受影响
@@ -386,7 +388,7 @@ test('single-key object with an internally breaking value stays hanging', () => 
     '        , pattern: $pattern',
     '        }',
     '    }',
-    '}',
+    '  }',
     ']'
   ].join('\n') + '\n'
   assert.equal(fmt(src), expected)
