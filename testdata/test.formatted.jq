@@ -69,8 +69,8 @@ def lex:
         # surrogate pair \uD83D\uDCA9 -> 💩
         ( .surrogate
         | ([.[2:6], .[8:] | _fromhex]) as [$hi, $lo]
-          # translate surrogate hi/lo pair values into codepoint
-          # (hi-0xd800<<10) + (lo-0xdc00) + 0x10000
+        # translate surrogate hi/lo pair values into codepoint
+        # (hi-0xd800<<10) + (lo-0xdc00) + 0x10000
         | [($hi - 55296) * 1024 + ($lo - 56320) + 65536]
         | implode
         )
@@ -124,7 +124,7 @@ def lex:
       // _re("^@[_a-zA-Z][_a-zA-Z0-9]*"; {at_ident: .})
       // _re("^[_a-zA-Z][_a-zA-Z0-9]*"; {ident: .})
       // _re("^\\$[_a-zA-Z][_a-zA-Z0-9]*"; {binding: .})
-        # 1.23, .123, 123e2, 1.23e2, 123E2, 1.23e+2, 1.23E-2 or 123
+      # 1.23, .123, 123e2, 1.23e2, 123E2, 1.23e+2, 1.23E-2 or 123
       // _re("^(?:[0-9]+\\.[0-9]+|[0-9]+)(?:[eE][-\\+]?[0-9]+)?"; {number: .})
       // _re( "^\"(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
         ( .[1:-2]
@@ -133,7 +133,7 @@ def lex:
         )
       )
       //
-        # conditionally look for end or middle of interpolated string
+      # conditionally look for end or middle of interpolated string
         ( select($string_stack[-1] == "\\(")
         | _re( "^\\)(?:[^\"\\\\]|\\\\.)*?\\\\\\(";
           ( .[1:-2]
@@ -148,7 +148,7 @@ def lex:
             , string_stack: ($string_stack[0:-1]) } )
         )
         )
-        # match " <any non-"-or-\> or <\ + any> "
+      # match " <any non-"-or-\> or <\ + any> "
       // _re("^\"(?:[^\"\\\\]|\\\\.)*?\""; .[1:-1] | _unescape | {string: .})
       // _const("=="; {equal_equal: .})
       // _const("|="; {pipe_equal: .})
@@ -273,10 +273,10 @@ def parse:
                   end
                 ) as [$rest, $t1]
               | $rest
-                # TODO: better way?
-                # if functions was defined for the left side they should be
-                # move to the op itself to also be available on the right side
-                # ex: def f: 123; 1 + f
+              # TODO: better way?
+              # if functions was defined for the left side they should be
+              # move to the op itself to also be available on the right side
+              # ex: def f: 123; 1 + f
               | $t as {$func_defs}
               | _f(
                 ( { op: $next_op.name
@@ -327,7 +327,7 @@ def parse:
         #    term | ...
         ( ( def _colon_val:
             ( _consume(.colon)[0]
-              # keyval_query only allows | operator (, is separator)
+            # keyval_query only allows | operator (, is separator)
             | _p("keyval_query") as [$rest, $val]
             | $rest
             | [ .
@@ -837,7 +837,7 @@ def parse:
           | _optional(_p("query")) as [$rest, $end_]
           | $rest
           | _consume(.rsquare)[0]
-            # fail if both missing
+          # fail if both missing
           | if $start == null and $end_ == null then empty end
           | [ .
             , { index:
@@ -933,7 +933,7 @@ def parse:
         | _optional(_p("query")) as [$rest, $end_]
         | $rest
         | _consume(.rsquare)[0]
-          # fail is both missing
+        # fail is both missing
         | if $start == null and $end_ == null then empty else . end
         | [ .
           , { term:
@@ -959,7 +959,7 @@ def parse:
           ]
         )
       //
-        # ."name" index
+      # ."name" index
         ( _consume(.dot)[0]
         | _p("string") as [$rest, $string]
         | $rest
@@ -1329,7 +1329,7 @@ def eval_ast($query; $path; $env; undefined_func):
       else
         ( $p[0] as $p0
         | ($p0 | type) as $t
-          #| debug({type: type, $t, $p0, $t, dot: .})
+        #| debug({type: type, $t, $p0, $t, dot: .})
         | if . == null then
             if $t == "number" then
               [range($p0 + 1) | null]
@@ -1360,7 +1360,7 @@ def eval_ast($query; $path; $env; undefined_func):
         )
       ) as $query_env
     |
-      # eval a index, is also used by _e_suffix
+    # eval a index, is also used by _e_suffix
       def _e_index($index; $query_path; $query_input; $opt):
         try ( $index as { $name
                         , $str
@@ -1554,7 +1554,7 @@ def eval_ast($query; $path; $env; undefined_func):
                 | { key: ($name + "/0")
                   , value:
                       { body: $call_args[.key]
-                        # save current env
+                      # save current env
                       , env: $query_env
                       , lambda: true
                       }
@@ -1562,8 +1562,8 @@ def eval_ast($query; $path; $env; undefined_func):
                 )
               )
               ) as $lambda_env
-              # if not lambda inject the function in it's own env to allow recursion
-              # TODO: find a better way
+            # if not lambda inject the function in it's own env to allow recursion
+            # TODO: find a better way
             | ( if $e.lambda then {}
                 else {($name): $e}
                 end
@@ -1642,7 +1642,7 @@ def eval_ast($query; $path; $env; undefined_func):
                 )
               elif $name == "path/1" then
                 ( _e($args[0]; []; $query_env; $label_count) as [$p, $_v]
-                  # TODO: try/catch error
+                # TODO: try/catch error
                 | if $p | length > 0 and first == null then
                     # TODO: include path and value?
                     error("invalid path expression")
@@ -1812,7 +1812,7 @@ def eval_ast($query; $path; $env; undefined_func):
 
       def _array:
         [ [null]
-          # .query only set if there was a query
+        # .query only set if there was a query
         , [ _e($query.term.array.query // empty; []; $query_env; $label_count) as [$_, $v]
           | $v
           ]
@@ -1846,7 +1846,7 @@ def eval_ast($query; $path; $env; undefined_func):
           ]
         |
           def _f:
-            # does not have base case as we know last else will be true
+        # does not have base case as we know last else will be true
             ( .[0] as [$cond, $then_]
             | ( $input
               | _e($cond; $path; $query_env; $label_count)
@@ -1921,8 +1921,8 @@ def eval_ast($query; $path; $env; undefined_func):
                 }
             }
           ) as $catch_
-          # TODO: will catch jqjq bugs causing error
-          # do own backtracking? sentinel value somehow?
+        # TODO: will catch jqjq bugs causing error
+        # do own backtracking? sentinel value somehow?
         | try _e($body; $path; $query_env; $label_count)
           catch
             if _is_internal_error or _is_internal_break then error
@@ -2655,11 +2655,11 @@ def eval($expr; $globals; $builtins_env):
     $builtins_env;
     builtin_undefined_func($globals; $builtins_env)
   ) as [$path, $value]
-    # if we have a path make eval be a valid path expression by using getpath
-    # otherwise just return the value
-    # TODO: does not work with jq yet because issue with bind patterns
-    # $ gojq -cn -L . 'include "jqjq"; {} | {a:1} | eval(".a") += 1'
-    # {"a":2}
+  # if we have a path make eval be a valid path expression by using getpath
+  # otherwise just return the value
+  # TODO: does not work with jq yet because issue with bind patterns
+  # $ gojq -cn -L . 'include "jqjq"; {} | {a:1} | eval(".a") += 1'
+  # {"a":2}
   | if $path | . == [] or .[0] == null then $value
     else getpath($path)
     end
@@ -2738,7 +2738,7 @@ def parse_options:
     else
       try ( (.args.rest[0] | tonumber) as $indent
           | .args.rest = .args.rest[1:]
-        # allow indentation over 7 spaces, unlike jq
+          # allow indentation over 7 spaces, unlike jq
           | if $indent | . != trunc or . < -1 then error end
           | .indent = ($indent | if . == -1 then "tab" end)
           | .print_pretty = true
@@ -2774,34 +2774,34 @@ def parse_options:
     // option("c"; "compact-output"; .indent = 0 | .print_pretty = false)
     // option("C"; "color-output"; .color_output = true)
     // option("M"; "monochrome-ouput"; .no_color_output = true)
-      # // option("a"; "ascii-output"; .ascii_output = true)
+    # // option("a"; "ascii-output"; .ascii_output = true)
     // option(null; "unbuffered"; .unbuffered_output = true)
-      # // option("S"; "sort-keys"; .sorted_output = true)
-      # // option("R"; "raw-input"; .raw_input = true)
+    # // option("S"; "sort-keys"; .sorted_output = true)
+    # // option("R"; "raw-input"; .raw_input = true)
     // option("n"; "null-input"; .null_input = true)
     // option("f"; "from-file"; .from_file = true)
-      # // option("L"; "library-path"; handle_library_path)
+    # // option("L"; "library-path"; handle_library_path)
     // option("b"; "binary"; .binary_input_output = true)
     // option(null; "tab"; .indent = "tab" | .print_pretty = true)
     // option(null; "indent"; handle_indent)
-      # // option(null; "seq"; .seq = true)
-      # // option(null; "stream"; .parse_streaming = true)
-      # // option(null; "stream-errors"; (.parse_streaming, .parse_stream_errors) = true)
-      # // option("e"; "exit-status"; .exit_status = true)
+    # // option(null; "seq"; .seq = true)
+    # // option(null; "stream"; .parse_streaming = true)
+    # // option(null; "stream-errors"; (.parse_streaming, .parse_stream_errors) = true)
+    # // option("e"; "exit-status"; .exit_status = true)
     // option(null; "args"; .args.rest_are_positional = "arg")
     // option(null; "jsonargs"; .args.rest_are_positional = "argjson")
     // option(null; "arg"; handle_arg("arg"; "value"))
     // option(null; "argjson"; handle_arg("argjson"; "text"))
     // option(null; "rawfile"; handle_arg("rawfile"; "filename"))
     // option(null; "slurpfile"; handle_arg("slurpfile"; "filename"))
-      # // option(null; "debug-dump-disasm"; .debug_dump_disasm = true)
-      # // option(null; "debug-trace=all"; .debug_trace_all = true)
-      # // option(null; "debug-trace"; .debug_trace = true)
+    # // option(null; "debug-dump-disasm"; .debug_dump_disasm = true)
+    # // option(null; "debug-trace=all"; .debug_trace_all = true)
+    # // option(null; "debug-trace"; .debug_trace = true)
     // option("h"; "help"; .action = "help")
-      # // option("V"; "version"; .action = "version")
-      # // option(null; "build-configuration"; .action = "build-configuration")
+    # // option("V"; "version"; .action = "version")
+    # // option(null; "build-configuration"; .action = "build-configuration")
     // option(null; "run-tests"; .action = "run-tests")
-      # jqjq extensions:
+    # jqjq extensions:
     // option(null; "jq"; handle_jq)
     // option(null; "repl"; .mode = "repl")
     // option(null; "lex"; .mode = "lex")

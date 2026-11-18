@@ -265,15 +265,17 @@ export class Layout {
       this.#pendingForcedBreak = true
     } else {
       // 独立注释：独占一行，缩进与当前上下文一致；正处某个子句分支
-      // 里（且未进入更深的括号组）时，对齐到分支内容的缩进。
-      // 与上一个输出之间的源码空行原样保留。先结束未完的当前行，
-      // 空行才能落在它和注释之间。
+      // 里（且未进入更深的括号组）时，对齐到分支内容的缩进；悬挂组
+      // 的运算符链中间（未见顶层分隔符）时，注释属于下一行，与链的
+      // 对齐列一致。与上一个输出之间的源码空行原样保留。先结束未完
+      // 的当前行，空行才能落在它和注释之间。
       if (this.#out.hasContent) this.#out.finishLine()
       this.#emitBlanks(this.#blankCount(t.line))
+      const innerGroup = this.#groups[this.#groups.length - 1]
       const indent =
         this.#bodyIndent !== null && this.#bodyIndent.depth === this.#groups.length
           ? this.#bodyIndent.indent
-          : this.#ctxIndent
+          : this.#hangingChainAlign(innerGroup) ?? this.#ctxIndent
       this.#out.addStandaloneLine(indent, text)
     }
     // 续行注释（行尾奇数个反斜杠）本身横跨多行
