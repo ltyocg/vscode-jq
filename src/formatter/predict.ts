@@ -126,10 +126,13 @@ export class Predict {
       const bk = breakBefore(this.#st, k)
       if (bk === 'pipe' || bk === 'binop' || bk === 'leadSep' || bk === 'clause' || bk === 'reduce')
         return true
-      // 分隔符、子句关键字或尾随双目运算符/管道之后的换行：元素/分支/
-      // 操作数另起一行（见 decideBreak）
+      // 分隔符、子句关键字（含 try 的 body）、尾随双目运算符/管道或
+      // as 之后的换行：元素/分支/操作数/绑定模式另起一行（见
+      // decideBreak）
       const ak = breakAfter(this.#st, k - 1)
-      if (ak === 'afterSep' || ak === 'afterClause' || ak === 'afterBinop') return true
+      if (ak === 'afterSep' || ak === 'afterClause' || ak === 'afterBinop' || ak === 'afterAs') {
+        return true
+      }
     }
     const last = this.#st.tokens[close - 1]
     return this.#st.tokens[close].line > endLine(last)
@@ -157,6 +160,17 @@ export class Predict {
   firstSeparator(i: number, close: number): number {
     for (let k = i + 1; k < close; k++) {
       const tk = this.#st.tokens[k]
+      // as 之后的绑定模式与 try 的 body（源码有换行）终结预算：它们
+      // 自身常是会断行的括号组，必须先于下方的嵌套组递归检查，否则
+      // 预算会错误地延伸进组的首行。then/else/catch/end 自身即是
+      // clause 断点，扫描走不到这里
+      {
+        const prev = this.#st.tokens[k - 1]
+        if (newlinesBetween(prev, tk) > 0) {
+          const ak = breakAfter(this.#st, k - 1)
+          if (ak === 'afterAs' || ak === 'afterClause') return k
+        }
+      }
       if (tk.type === 'operator' && OPENERS.has(tk.text)) {
         const innerClose = this.#st.match.get(k)!
         const style = this.groupStyle(k)
@@ -183,8 +197,8 @@ export class Predict {
    * 悬挂组内从 tokens[j] 起的当前元素内部是否会断行（按源码推断）。
    * 元素到同层的下一个分隔符或闭括号为止；嵌套组递归用 groupBreaks
    * 判断（不会断行的组渲染为单行，整组跳过）。判断与 decideBreak
-   * 的断点保持一致：行首管道/双目运算符/子句关键字、对象键冒号后的
-   * 换行、注释。
+   * 的断点保持一致：行首管道/双目运算符/子句关键字、try 的 body、
+   * 对象键冒号后的换行、as 之后的绑定模式、注释。
    */
   elementBreaks(j: number): boolean {
     const cap = Math.min(this.#st.tokens.length, j + MAX_SEGMENT_LOOKAHEAD)
@@ -212,6 +226,8 @@ export class Predict {
         if (ak === 'afterClause') return true
         // 尾随双目运算符/管道之后换行：操作数另起一行（见 decideBreak）
         if (ak === 'afterBinop') return true
+        // as 之后换行：绑定模式另起一行（见 decideBreak）
+        if (ak === 'afterAs') return true
       } else if (tk.type === 'operator' && (tk.text === ',' || tk.text === ';')) {
         return false // 空元素（j 本身就是分隔符）
       }

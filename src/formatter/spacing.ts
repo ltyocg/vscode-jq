@@ -126,8 +126,12 @@ export function isObjectKey(tokens: readonly FmtToken[], k: number): boolean {
   return t.type === 'keyword' && !!n && n.type === 'operator' && n.text === ':'
 }
 
-/** 能作为操作数结尾的 token：其后紧跟的 '.' 或 '[' 应当紧贴。 */
-function isOperandEnd(t: Token | undefined): boolean {
+/**
+ * 能作为操作数结尾的 token：其后紧跟的 '.' 或 '[' 应当紧贴（调用与
+ * 下标括号因此区别于开启新表达式的组开括号，boundExprStartCol 的
+ * 回溯也要做这个区分）。
+ */
+export function isOperandEnd(t: Token | undefined): boolean {
   if (!t) return false
   switch (t.type) {
     case 'ident':

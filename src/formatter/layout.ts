@@ -17,6 +17,7 @@ import {
   CLOSERS,
   OPENERS,
   gapBetween,
+  isOperandEnd,
   padsInsideBracket,
   type FmtToken
 } from './spacing'
@@ -112,6 +113,14 @@ export class Layout {
    * 分支里的独立注释与分支内容对齐到同一缩进。
    */
   #bodyIndent: { indent: number; depth: number } | null = null
+  /**
+   * 正在 if/elif 的条件里（尚未到 then）：条件的折行内容（尾随运算符
+   * 的操作数、行首运算符、其间的独立注释）锚到「子句关键字列与上下
+   * 文层的较大者 +1 层」—— 与分支体同层，属于子句层级，不挂到外层
+   * 括号组的运算符链上。depth 记录进入条件时的括号深度：更深的括号
+   * 组有自己的对齐，条件锚点不越级接管。then 终止条件，elif 重开。
+   */
+  #condIndent: { indent: number; depth: number } | null = null
   #prevReal: FmtToken | undefined
   /** prevReal 在 token 流中的下标（-1 = 还没有）；跳过注释 */
   #prevRealIdx = -1
@@ -244,6 +253,13 @@ export class Layout {
     return this.#emitStart[this.#prevRealIdx] ?? this.#out.indentCols
   }
 
+  /** 折行内容直接处于 if/elif 条件里时的锚点列（见 condIndent）；否则 null */
+  #condAnchor(): number | null {
+    return this.#condIndent !== null && this.#condIndent.depth === this.#groups.length
+      ? this.#condIndent.indent
+      : null
+  }
+
   /** tokens[i] 的开括号是否与前一个 token 粘连（调用语法 'f('） */
   #isCallLike(i: number): boolean {
     const t = this.#tokens[i]
@@ -265,20 +281,37 @@ export class Layout {
     'module'
   ])
 
+  /**
+   * tokens[k]（k < 0 表示没有前 token）之后开始的 token 是否开启新
+   * 表达式：开括号、分隔符、冒号、管道、'?//'、子句与前缀关键字之后
+   * 开始新表达式，双目运算符延续同一表达式（链）；点号字段名（'.catch'）
+   * 是普通操作数，不算边界。trackOperandStart 的重置谓词与
+   * boundExprStartCol 的回溯边界共用这一份定义；回溯侧另对调用/下标
+   * 括号（'f('、'.['）收窄 —— 它们贴着操作数，是链的一部分。
+   */
+  #startsExpressionAfter(k: number): boolean {
+    if (k < 0) return true
+    const p = this.#tokens[k]
+    if (p.type === 'operator') {
+      return (
+        OPENERS.has(p.text) ||
+        p.text === ',' ||
+        p.text === ';' ||
+        p.text === ':' ||
+        p.text === '|' ||
+        p.text === '?//'
+      )
+    }
+    return (
+      p.type === 'keyword' &&
+      !this.#st.afterDot[k] &&
+      (CLAUSE_KEYWORDS.has(p.text) || Layout.#PREFIX_KEYWORDS.has(p.text))
+    )
+  }
+
   /** 刚发射的 token 开始新表达式时，把它所在行的行首记为栈顶层的起点 */
   #trackOperandStart(): void {
-    const p = this.#prevReal
-    if (
-      p === undefined ||
-      (p.type === 'operator' &&
-        (OPENERS.has(p.text) ||
-          p.text === ',' ||
-          p.text === ';' ||
-          p.text === ':' ||
-          p.text === '|' ||
-          p.text === '?//')) ||
-      (p.type === 'keyword' && (CLAUSE_KEYWORDS.has(p.text) || Layout.#PREFIX_KEYWORDS.has(p.text)))
-    ) {
+    if (this.#startsExpressionAfter(this.#prevRealIdx)) {
       this.#operandStarts[this.#operandStarts.length - 1] = this.#out.indentCols
     }
   }
@@ -314,6 +347,38 @@ export class Layout {
     return start !== undefined && tk.line === endLine(tk) ? start : null
   }
 
+  /**
+   * 'as'（tokens[asIdx]）左侧绑定操作数起始 token 的发射起始列；
+   * 无法确定（回溯跨过注释、操作数起点跨行）时返回 null，退回当前
+   * 行行首。操作数起点＝最近的表达式边界之后的第一个 token（见
+   * startsExpression；调用/下标括号不算边界，'map(.x) as' 的操作数
+   * 从 'map' 起）。锚到 token 列而非行首，'| $q as' 折行后的模式才
+   * 不会与管道链同层 —— 同 keyStartCol 的锚点策略。
+   */
+  #boundExprStartCol(asIdx: number): number | null {
+    let k = asIdx - 1
+    while (k >= 0 && this.#tokens[k].type === 'comment') k--
+    while (k > 0) {
+      let j = k - 1
+      while (j >= 0 && this.#tokens[j].type === 'comment') j--
+      if (j < 0) break
+      const p = this.#tokens[j]
+      if (this.#startsExpressionAfter(j)) {
+        if (p.type === 'operator' && OPENERS.has(p.text) && isOperandEnd(this.#tokens[j - 1])) {
+          k = j // 'f('、'.['：链的一部分，不是表达式边界
+          continue
+        }
+        break
+      }
+      k = j
+    }
+    if (k < 0) return null
+    const tk = this.#tokens[k]
+    if (tk.type === 'comment') return null
+    const start = this.#emitStart[k]
+    return start !== undefined && tk.line === endLine(tk) ? start : null
+  }
+
   #emitComment(t: FmtToken, i: number): void {
     const text = trimLineEnd(t.text)
     if (t.line === this.#lastAnyEndLine && this.#lastAnyEndLine >= 0) {
@@ -333,6 +398,7 @@ export class Layout {
       this.#emitBlanks(this.#blankCount(t.line))
       const innerGroup = this.#groups[this.#groups.length - 1]
       const p = this.#prevReal
+      const cond = this.#condAnchor()
       let indent: number
       if (
         p !== undefined &&
@@ -340,17 +406,21 @@ export class Layout {
         breakAfter(this.#st, this.#prevRealIdx) === 'afterBinop'
       ) {
         // 独占一行的运算符与其换行操作数之间的注释：与操作数同缩进
-        //（基础缩进取运算符自身的发射起始列，连续注释不逐级抬高）
+        //（基础缩进取运算符自身的发射起始列，连续注释不逐级抬高）。
+        // if/elif 条件里改锚条件层（见 condAnchor）
         const base =
           p.text === '|'
-            ? this.#pipeIndent(innerGroup)
-            : (this.#hangingChainAlign(innerGroup) ?? this.#prevRealStart())
+            ? (cond ?? this.#pipeIndent(innerGroup))
+            : (cond ?? this.#hangingChainAlign(innerGroup) ?? this.#prevRealStart())
         indent = base + this.#opts.indentSize
       } else if (this.#nextIsClauseKeyword(i)) {
         // 下一行是子句关键字（elif/else/end/catch/then）：注释与关键
         // 字所在列对齐，而不是分支内容缩进
         const kw = this.#tokens[this.#nextRealIdxAfter(i)]
         indent = this.#findClauseIndent(clauseStackKind(kw.text)) ?? this.#ctxIndent
+      } else if (cond !== null) {
+        // if/elif 条件中间的注释：与条件的折行内容同层
+        indent = cond
       } else if (this.#bodyIndent !== null && this.#bodyIndent.depth === this.#groups.length) {
         indent = this.#bodyIndent.indent
       } else {
@@ -380,11 +450,12 @@ export class Layout {
       case 'pipe': {
         // 管道：源码此处有换行，或下一片段放不进本行，则以行首 '|'
         // 断行。尾随风格（'|' 之后源码已换行）不抢断：下一片段反正
-        // 会另起一行，交给 afterBinop 按源码保留。缩进见 pipeIndent
+        // 会另起一行，交给 afterBinop 按源码保留。缩进：if/elif 条件
+        // 里锚到条件层（见 condAnchor），其余见 pipeIndent
         const next = this.#tokens[i + 1]
         const trailing = !!next && newlinesBetween(t, next) > 0
         if (!inlineInnermost && (nl > 0 || (this.#m.pipeOverflow(i) && !trailing))) {
-          indent = this.#pipeIndent(innerGroup)
+          indent = this.#condAnchor() ?? this.#pipeIndent(innerGroup)
         }
         break
       }
@@ -404,12 +475,14 @@ export class Layout {
         // 双目运算符（含关键字 and/or）：源码此处有换行，或其后的
         // 片段放不进本行，则以行首运算符断行，与表达式起始行同层
         //（#operandStart，闭括号回缩不抬高链上的后续运算符）—— 悬挂
-        // 组内即与开括号竖向对齐。尾随风格（运算符之后源码已换行）
+        // 组内即与开括号竖向对齐。if/elif 条件里改锚条件层（见
+        // condAnchor）。尾随风格（运算符之后源码已换行）
         // 不抢断，理由同 pipe
         const next = this.#tokens[i + 1]
         const trailing = !!next && newlinesBetween(t, next) > 0
         if (!inlineInnermost && (nl > 0 || (this.#m.operatorOverflow(i) && !trailing))) {
           indent =
+            this.#condAnchor() ??
             this.#hangingChainAlign(innerGroup) ??
             this.#operandStarts[this.#operandStarts.length - 1]
         }
@@ -486,10 +559,28 @@ export class Layout {
           break
         }
         case 'afterClause':
-          // 子句关键字之后源码换行：分支内容另起一行，缩进为分支缩进
-          //（比子句关键字所在层与上下文层的较大者深一层）；elif 后是
-          // 条件而非分支，回到上下文缩进。'end' 之后不另起分支行。
-          if (p.text !== 'end' && nl > 0) indent = this.#bodyIndent?.indent ?? this.#ctxIndent
+          // 子句关键字（含 try）之后源码换行：分支内容另起一行，缩进
+          // 为分支缩进（比子句关键字所在层与上下文层的较大者深一层）；
+          // elif 后是条件而非分支，回到上下文缩进。'end' 之后不另起
+          // 分支行。try 的分支缩进现算而不写入 bodyIndent —— try 没有
+          // end，写入会泄漏到构造结束之后，让后续同深度的独立注释错误
+          // 对齐（then/else 的分支缩进由 end 清理，try 只能现算）
+          if (p.text !== 'end' && nl > 0) {
+            indent =
+              p.text === 'try'
+                ? Math.max(this.#findClauseIndent('try') ?? this.#ctxIndent, this.#ctxIndent) +
+                  this.#opts.indentSize
+                : (this.#bodyIndent?.indent ?? this.#ctxIndent)
+          }
+          break
+        case 'afterAs':
+          // as 之后源码换行：绑定模式（$var / [..] / {..}）另起一行，
+          // 比操作数表达式的起始列深一层（见 boundExprStartCol）
+          if (nl > 0) {
+            indent =
+              (this.#boundExprStartCol(this.#prevRealIdx) ?? this.#out.indentCols) +
+              this.#opts.indentSize
+          }
           break
         case 'afterBinop': {
           // 双目运算符/管道之后源码换行：操作数另起一行，尊重源码的
@@ -497,13 +588,16 @@ export class Layout {
           // 两个相位 1 分支）；运算符独占一行（行首风格且操作数也
           // 换行）时操作数再深一层 —— 前后的操作数不与运算符同级。
           // 独占一行的基础缩进取运算符自身的发射起始列：其间插入的
-          // 独立注释会成为「当前行」，用 out.indentCols 会逐级抬高
+          // 独立注释会成为「当前行」，用 out.indentCols 会逐级抬高。
+          // if/elif 条件里改锚条件层（见 condAnchor）—— 操作数属于
+          // 子句层级，不挂到外层括号组的链上
           if (nl > 0) {
             const opBase = this.#prevRealLead ? this.#prevRealStart() : this.#out.indentCols
             const base =
-              p.text === '|'
+              this.#condAnchor() ??
+              (p.text === '|'
                 ? this.#pipeIndent(innerGroup)
-                : (this.#hangingChainAlign(innerGroup) ?? opBase)
+                : (this.#hangingChainAlign(innerGroup) ?? opBase))
             indent = this.#prevRealLead ? base + this.#opts.indentSize : base
           }
           break
@@ -528,8 +622,10 @@ export class Layout {
    * if/try 子句栈。
    */
   #updateContexts(t: FmtToken, i: number): void {
-    // `{if: 1}` —— 关键字作为对象键，不触发任何语法记账
+    // `{if: 1}`、'.catch' —— 关键字作为对象键或点号字段名，不触发
+    // 任何语法记账
     const objectKey = this.#st.objectKey[i]
+    const afterDot = this.#st.afterDot[i]
 
     if (t.type === 'operator') {
       if (OPENERS.has(t.text)) {
@@ -580,7 +676,7 @@ export class Layout {
         if (top && top.depth === this.#groups.length)
           this.#ctxIndent = this.#def.stack.pop()!.savedIndent
       }
-    } else if (t.type === 'keyword' && !objectKey) {
+    } else if (t.type === 'keyword' && !objectKey && !afterDot) {
       if (t.text === 'def') {
         // 只有真正的定义：'def' IDENT (':' | '(' …)
         const n1 = this.#tokens[i + 1]
@@ -595,30 +691,47 @@ export class Layout {
             : null
       } else if (t.text === 'if') {
         // 关键字刚发射完毕：其起始列 = 当前行末列减去自身宽度。
-        // 子句关键字（then/elif/else/end）与它竖向对齐
-        this.#clauses.push({ kind: 'if', indent: this.#out.col() - t.text.length })
+        // 子句关键字（then/elif/else/end）与它竖向对齐；条件的折行
+        // 内容锚到这一列 +1 层（见 condIndent）
+        const clause = this.#out.col() - t.text.length
+        this.#clauses.push({ kind: 'if', indent: clause })
         this.#bodyIndent = null
+        this.#condIndent = {
+          indent: Math.max(clause, this.#ctxIndent) + this.#opts.indentSize,
+          depth: this.#groups.length
+        }
       } else if (t.text === 'try') {
+        // 关键字刚发射完毕：其起始列 = 当前行末列减去自身宽度，catch
+        // 与它竖向对齐。body 的缩进在 decideBreak 现算（见 afterClause）
         this.#clauses.push({ kind: 'try', indent: this.#out.col() - t.text.length })
         this.#bodyIndent = null
+        this.#condIndent = null
       } else if (t.text === 'then' || t.text === 'else') {
         // 进入 if 分支：分支内容比「子句关键字所在层与上下文层的
-        // 较大者」再深一层
+        // 较大者」再深一层；条件到此结束（else 属防御性清理）
         const clause = this.#findClauseIndent('if') ?? this.#ctxIndent
         this.#bodyIndent = {
           indent: Math.max(clause, this.#ctxIndent) + this.#opts.indentSize,
           depth: this.#groups.length
         }
+        this.#condIndent = null
       } else if (t.text === 'elif') {
         this.#bodyIndent = null // elif 之后是条件，不是分支
+        const clause = this.#findClauseIndent('if') ?? this.#ctxIndent
+        this.#condIndent = {
+          indent: Math.max(clause, this.#ctxIndent) + this.#opts.indentSize,
+          depth: this.#groups.length
+        }
       } else if (t.text === 'end') {
         this.#popClause('if')
         this.#bodyIndent = null
+        this.#condIndent = null
       } else if (t.text === 'catch') {
         const clause = this.#findClauseIndent('try') ?? this.#ctxIndent
         const indent = Math.max(clause, this.#ctxIndent) + this.#opts.indentSize
         this.#popClause('try')
         this.#bodyIndent = { indent, depth: this.#groups.length }
+        this.#condIndent = null
       }
     }
   }

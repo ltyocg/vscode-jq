@@ -9,8 +9,9 @@
  *    decideBreak），predict 的 groupBreaks 以 k > i + 1 排除紧跟
  *    开括号的 def（悬挂式例外）；
  *  - afterClause：predict 把 'end' 也算触发 token（end 之后换行
- *    也是组内断行），decide 只认 then/elif/else/catch（'end' 之后
- *    不另起分支行）；
+ *    也是组内断行），decide 认 then/elif/else/catch/try（'end' 之后
+ *    不另起分支行）；try 的分支缩进在其发射时记入 bodyIndent，
+ *    predict 当作普通 afterClause；
  *  - afterColon：predict 一律视为断点，decide 再按 def 记账与所在
  *    括号种类细分（def 头冒号要求全部组展开，对象冒号只要求最内层
  *    大括号组展开，切片冒号不断行）；
@@ -18,7 +19,11 @@
  *    measure 的 findSegmentEnd 与 predict 的 firstSeparator 仅在
  *    换行存在时把它当片段边界，未换行时片段要跨过 reduce 分组
  *    继续量宽；
- *  - afterBinop：decide 与 predict 两侧都只认源码换行（不补断）。
+ *  - afterBinop：decide 与 predict 两侧都只认源码换行（不补断）；
+ *  - afterAs：两侧同样只认源码换行；decide 侧的缩进锚到 as 左侧
+ *    操作数的起始列（layout 的 boundExprStartCol 回溯），predict 侧
+ *    只计「会不会断」，firstSeparator 里它先于嵌套组递归终结开括号
+ *    行预算（模式自身常是会断行的括号组）。
  */
 import { CLAUSE_KEYWORDS, CLOSERS, LINE_BREAK_BINOPS, OPENERS, type FmtToken } from './spacing'
 import { matchBackward, type TokenStream } from './tokens'
@@ -33,7 +38,7 @@ export function clauseStackKind(text: string): 'if' | 'try' {
 
 /**
  * 断点种类。前七种断在 tokens[k] 之前（k 自身是断点 token），
- * 后五种断在 tokens[k] 之后（k 是触发 token）。
+ * 后六种断在 tokens[k] 之后（k 是触发 token）。
  */
 export type BreakKind =
   | 'pipe' // '|' 之前：行首管道，比上下文深一层
@@ -46,8 +51,9 @@ export type BreakKind =
   | 'afterSep' // ','/';' 之后：元素另起一行
   | 'afterColon' // ':' 之后：decide 再按 def 记账/括号种类细分
   | 'afterOpener' // 分隔式展开组开括号之后：首元素另起一行
-  | 'afterClause' // 子句关键字之后：分支内容另起一行
+  | 'afterClause' // 子句关键字（含 try 的 body 触发）之后：分支内容另起一行
   | 'afterBinop' // 双目运算符/管道之后（尾随风格）：操作数另起一行
+  | 'afterAs' // 'as' 之后（尾随风格）：绑定模式另起一行，比操作数起始列深一层
 
 /** 可作行首断点的双目运算符（一元 '-' 除外） */
 export function isLineBreakBinop(t: FmtToken): boolean {
@@ -79,7 +85,8 @@ function afterAsPattern(st: TokenStream, k: number): boolean {
 
 /**
  * tokens[k] 自身作为断点 token（断点在 k 之前）的种类；null = 不是
- * 断点。对象键关键字（`{if: 1}`、`{or: 1}`）不算子句/def/双目断点。
+ * 断点。对象键关键字（`{if: 1}`、`{or: 1}`）与点号字段名（`.catch`、
+ * `$if_.elif`）不算子句/def/双目断点。
  */
 export function breakBefore(st: TokenStream, k: number): BreakKind | null {
   const tk = st.tokens[k]
@@ -91,7 +98,7 @@ export function breakBefore(st: TokenStream, k: number): BreakKind | null {
     if (tk.text === '(' && afterAsPattern(st, k)) return 'reduce'
     return null
   }
-  if (tk.type === 'keyword' && !st.objectKey[k]) {
+  if (tk.type === 'keyword' && !st.objectKey[k] && !st.afterDot[k]) {
     if (CLAUSE_KEYWORDS.has(tk.text)) return 'clause'
     if (tk.text === 'def' && k > 0) return 'def'
     // and/or 是关键字形态的双目运算符，与运算符形态一视同仁
@@ -104,6 +111,8 @@ export function breakBefore(st: TokenStream, k: number): BreakKind | null {
  * tokens[k] 之后是断点（k 是触发 token）的种类；null = 不是。
  * 对象键关键字仍是 afterClause ——「then: 之后换行」在 predict 与
  * decide 两侧都不加对象键守卫（见上方不对称清单之外的既有行为）。
+ * 点号字段名（'.catch'、'$if_.elif'）在两侧都被排除 —— 字段访问
+ * 是普通操作数，其后的换行照常折叠。
  */
 export function breakAfter(st: TokenStream, k: number): BreakKind | null {
   const tk = st.tokens[k]
@@ -114,8 +123,12 @@ export function breakAfter(st: TokenStream, k: number): BreakKind | null {
     if (tk.text === '|' || isLineBreakBinop(tk)) return 'afterBinop'
     return null
   }
-  if (tk.type === 'keyword') {
+  if (tk.type === 'keyword' && !st.afterDot[k]) {
     if (CLAUSE_KEYWORDS.has(tk.text)) return 'afterClause'
+    // try 的 body 与子句分支同形：另起一行，比 try 所在层深一层
+    //（catch 与 try 对齐的既有规则不动）
+    if (tk.text === 'try' && !st.objectKey[k]) return 'afterClause'
+    if (tk.text === 'as' && !st.objectKey[k]) return 'afterAs'
     if ((tk.text === 'and' || tk.text === 'or') && !st.objectKey[k]) return 'afterBinop'
   }
   return null

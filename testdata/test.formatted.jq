@@ -1337,7 +1337,7 @@ def eval_ast($query; $path; $env; undefined_func):
             end
           end
         | if (type == "object" and $t == "string") or
-        (type == "array" and $t == "number") then
+            (type == "array" and $t == "number") then
             .[$p0] |= _f($p[1:])
           else
             error("cannot index \(type) with \($t) \($p0)")
@@ -1348,13 +1348,14 @@ def eval_ast($query; $path; $env; undefined_func):
 
   def _e($query; $path; $env; $label_count):
     ( . # debug({c: ., $query, $path, $env})
-    | $query as { term:
-                    { type: $type
-                    , suffix_list: [{$optional}]
-                    }
-                , $op
-                , $func_defs
-                }
+    | $query as
+        { term:
+            { type: $type
+            , suffix_list: [{$optional}]
+            }
+        , $op
+        , $func_defs
+        }
     | ( ( ($func_defs // [])
         | func_defs_to_env($env)
         )
@@ -1362,38 +1363,40 @@ def eval_ast($query; $path; $env; undefined_func):
     |
       # eval a index, is also used by _e_suffix
       def _e_index($index; $query_path; $query_input; $opt):
-        try ( $index as { $name
-                        , $str
-                        , $is_slice
-                        , $start
-                        , end: $end_
-                        }
-            | . as $input
-            | if $name then [($query_path + [$name]), $input[$name]]
-              elif $str then [($query_path + [$str.str]), $input[$str.str]]
-              elif $is_slice then
-                ( $query_input
-                | ( if $start then _e($start; []; $query_env; $label_count)[1]
-                    else 0 end
-                  ) as $vs
-                | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
-                    else $input | length
-                    end
-                  ) as $ve
-                | [ [null]
-                  , $input[$vs:$ve]
-                  ]
-                )
-              elif $start then
-                ( $query_input
-                | _e($start; []; $query_env; $label_count) as [$_, $v]
-                | [ ($query_path + [$v])
-                  , $input[$v]
-                  ]
-                )
-              else . # TODO: error?
-              end
-            )
+        try
+          ( $index as
+              { $name
+              , $str
+              , $is_slice
+              , $start
+              , end: $end_
+              }
+          | . as $input
+          | if $name then [($query_path + [$name]), $input[$name]]
+            elif $str then [($query_path + [$str.str]), $input[$str.str]]
+            elif $is_slice then
+              ( $query_input
+              | ( if $start then _e($start; []; $query_env; $label_count)[1]
+                  else 0 end
+                ) as $vs
+              | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
+                  else $input | length
+                  end
+                ) as $ve
+              | [ [null]
+                , $input[$vs:$ve]
+                ]
+              )
+            elif $start then
+              ( $query_input
+              | _e($start; []; $query_env; $label_count) as [$_, $v]
+              | [ ($query_path + [$v])
+                , $input[$v]
+                ]
+              )
+            else . # TODO: error?
+            end
+          )
         catch
           if $opt then empty
           else error
@@ -1533,7 +1536,8 @@ def eval_ast($query; $path; $env; undefined_func):
               else _internal_error("unknown term")
               end
             );
-          try (lex | parse | _f)
+          try
+            (lex | parse | _f)
           catch
             error("fromjson only supports constant literals");
 
@@ -1864,11 +1868,12 @@ def eval_ast($query; $path; $env; undefined_func):
       def _reduce:
         # TODO: possible to do with function instead of reduce?
         # TODO: path(reduce) behavior
-        ( $query.term.reduce as { $term
-                                , pattern: {name: $name}
-                                , start: $start
-                                , update: $update
-                                }
+        ( $query.term.reduce as
+            { $term
+            , pattern: {name: $name}
+            , start: $start
+            , update: $update
+            }
         | _e($start; $path; $query_env; $label_count) as [$start_path, $start_v]
         | reduce _e({term: $term}; $start_path; $query_env; $label_count) as [$p, $v] (
           [$start_path, $start_v];
@@ -1882,12 +1887,13 @@ def eval_ast($query; $path; $env; undefined_func):
       def _foreach:
         # TODO: possible to do with function instead of foreach?
         # TODO: path(foreach) behavior
-        ( $query.term.foreach as { $term
-                                 , pattern: {name: $name}
-                                 , start: $start
-                                 , update: $update
-                                 , extract: $extract
-                                 }
+        ( $query.term.foreach as
+            { $term
+            , pattern: {name: $name}
+            , start: $start
+            , update: $update
+            , extract: $extract
+            }
         | ( $extract
           //
             { term:
@@ -1923,7 +1929,8 @@ def eval_ast($query; $path; $env; undefined_func):
           ) as $catch_
         # TODO: will catch jqjq bugs causing error
         # do own backtracking? sentinel value somehow?
-        | try _e($body; $path; $query_env; $label_count)
+        | try
+            _e($body; $path; $query_env; $label_count)
           catch
             if _is_internal_error or _is_internal_break then error
             else _e($catch_; $path; $query_env; $label_count)
@@ -1932,13 +1939,14 @@ def eval_ast($query; $path; $env; undefined_func):
 
       def _label:
         ( $query.term.label as {$body, $ident}
-        | try _e(
-          $body;
-          $path;
-          # @label prefix to not collide with bindings
-          $query_env + {("@label-" + $ident): $label_count};
-          $label_count + 1
-        )
+        | try
+            _e(
+              $body;
+              $path;
+              # @label prefix to not collide with bindings
+              $query_env + {("@label-" + $ident): $label_count};
+              $label_count + 1
+            )
           catch
             if _is_internal_break and _unwrap_internal_break == $label_count then empty
             else error
@@ -1985,9 +1993,10 @@ def eval_ast($query; $path; $env; undefined_func):
             )
           elif $suffix.index then
             # .<index>
-            try ( $v
-                | _e_index($suffix.index; $p; $input; $opt)
-                )
+            try
+              ( $v
+              | _e_index($suffix.index; $p; $input; $opt)
+              )
             catch
               # TODO: share optional code somehow below and in _e_index
               if $opt then empty
@@ -1995,10 +2004,11 @@ def eval_ast($query; $path; $env; undefined_func):
               end
           elif $suffix.iter then
             # .[]
-            try ( $v
-                | keys[] as $key
-                | [($p + [$key]), $v[$key]]
-                )
+            try
+              ( $v
+              | keys[] as $key
+              | [($p + [$key]), $v[$key]]
+              )
             catch
               if $opt then empty
               else error
@@ -2132,7 +2142,8 @@ def eval_ast($query; $path; $env; undefined_func):
       else _internal_error("unsupported query: \($query)")
       end
     );
-  try _e($query; []; $env; 0)
+  try
+    _e($query; []; $env; 0)
   catch
     if _is_internal_error then _unwrap_internal_error | error("internal error: \(.)")
     else error
@@ -2598,12 +2609,13 @@ def ascii_downcase: _ascii_map(65; 90; .+32);
 ";
 
 def _builtins_env:
-  try ( _builtins_src
-      | lex
-      | parse
-      | .func_defs
-      | func_defs_to_env({})
-      )
+  try
+    ( _builtins_src
+    | lex
+    | parse
+    | .func_defs
+    | func_defs_to_env({})
+    )
   catch
     error("builtins: \(.)");
 
@@ -2736,13 +2748,14 @@ def parse_options:
     if .args.rest | length < 1 then
       "--indent takes one parameter" | die
     else
-      try ( (.args.rest[0] | tonumber) as $indent
-          | .args.rest = .args.rest[1:]
-          # allow indentation over 7 spaces, unlike jq
-          | if $indent | . != trunc or . < -1 then error end
-          | .indent = ($indent | if . == -1 then "tab" end)
-          | .print_pretty = true
-          )
+      try
+        ( (.args.rest[0] | tonumber) as $indent
+        | .args.rest = .args.rest[1:]
+        # allow indentation over 7 spaces, unlike jq
+        | if $indent | . != trunc or . < -1 then error end
+        | .indent = ($indent | if . == -1 then "tab" end)
+        | .print_pretty = true
+        )
       catch
         ("--indent takes a number or -1 for tab" | die)
     end;
@@ -2910,7 +2923,7 @@ def jqjq($args; $env):
       else $default
       end
     | if $opts.no_color_output or
-    (($opts.color_output | not) and ($env.NO_COLOR | . != null and . != "")) then
+        (($opts.color_output | not) and ($env.NO_COLOR | . != null and . != "")) then
         null
       end
     | if . != null then map("\u001b[\(.)m") end
@@ -2974,11 +2987,12 @@ def jqjq($args; $env):
           catch error("break")
         | . as $expr
         | null
-        | try ( ( eval($expr; {"$ENV": $env}; $builtins_env)
-                | dump($opts)
-                )
-              , if $opts.raw_no_lf then "\n" else empty end
+        | try
+            ( ( eval($expr; {"$ENV": $env}; $builtins_env)
+              | dump($opts)
               )
+            , if $opts.raw_no_lf then "\n" else empty end
+            )
           catch
             "error: \(.)\n"
         )
@@ -3052,13 +3066,14 @@ def jqjq($args; $env):
       ( _builtins_env as $builtins_env
       | _from_jqtest[]
       | . as $c
-      | try if .error | not then
-              ( ( .input
-                , .output[]
-                ) |= fromjson
-              )
-            else .
-            end
+      | try
+          if .error | not then
+            ( ( .input
+              , .output[]
+              ) |= fromjson
+            )
+          else .
+          end
         catch
           ( . as $err
           | $c
@@ -3067,28 +3082,29 @@ def jqjq($args; $env):
       | select(.fromjson_error | not)
       | "line \(.line): \(.input | tojson) | \(.expr) -> \(.output | _to_unslurped)" as $test_name
       | . as $test
-      | try ( ($test.expr | lex | parse) as $ast
-            | $test.input
-            | [ eval_ast(
-              $ast;
-              [];
-              $builtins_env;
-              builtin_undefined_func({"$ENV": {"jqjq": 123}}; $builtins_env)
-            ) as [$_path, $value]
-              | $value
-              ] as $actual_output
-            | if $test.output == $actual_output then
-                ( "OK: \($test_name)"
-                , {ok: true}
-                )
-              else
-                ( "DIFF: \($test_name)"
-                , "  Expected: \($test.output | _to_unslurped)"
-                , "    Actual: \($actual_output | _to_unslurped)"
-                , {error: true}
-                )
-              end
-            )
+      | try
+          ( ($test.expr | lex | parse) as $ast
+          | $test.input
+          | [ eval_ast(
+            $ast;
+            [];
+            $builtins_env;
+            builtin_undefined_func({"$ENV": {"jqjq": 123}}; $builtins_env)
+          ) as [$_path, $value]
+            | $value
+            ] as $actual_output
+          | if $test.output == $actual_output then
+              ( "OK: \($test_name)"
+              , {ok: true}
+              )
+            else
+              ( "DIFF: \($test_name)"
+              , "  Expected: \($test.output | _to_unslurped)"
+              , "    Actual: \($actual_output | _to_unslurped)"
+              , {error: true}
+              )
+            end
+          )
         catch
           if $test.fail then
             if . == $test.error then
@@ -3119,8 +3135,8 @@ def jqjq($args; $env):
         | if $l.error then .errors += 1
           elif $l.ok then .oks += 1
           elif $l.end then .end = true
-            else .
-            end
+          else .
+          end
         )
       else . + {line: $l}
       end;

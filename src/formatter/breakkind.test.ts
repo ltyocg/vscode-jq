@@ -109,6 +109,39 @@ test('breakAfter classifies trigger tokens', () => {
     ),
     'afterClause'
   )
+  // try 的 body 与子句分支同形；as 之后是绑定模式
+  const st4 = stream('try .a catch .b')
+  assert.equal(
+    breakAfter(
+      st4,
+      st4.tokens.findIndex((t) => t.text === 'try')
+    ),
+    'afterClause'
+  )
+  const st5 = stream('.x as { a }')
+  assert.equal(
+    breakAfter(
+      st5,
+      st5.tokens.findIndex((t) => t.text === 'as')
+    ),
+    'afterAs'
+  )
+  // 对象键的 try/as 不触发
+  const st6 = stream('{try: 1, as: 2}')
+  assert.equal(
+    breakAfter(
+      st6,
+      st6.tokens.findIndex((t) => t.text === 'try')
+    ),
+    null
+  )
+  assert.equal(
+    breakAfter(
+      st6,
+      st6.tokens.findIndex((t) => t.text === 'as')
+    ),
+    null
+  )
 })
 
 test('breakBefore classifies the reduce/foreach group paren after an as pattern', () => {

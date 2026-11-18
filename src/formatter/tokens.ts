@@ -85,15 +85,36 @@ export function matchBackward(tokens: readonly FmtToken[], k: number): number {
 export const MAX_SEGMENT_LOOKAHEAD = 200
 
 /**
+ * tokens[k] 是否是紧贴前一个 '.' 的关键字 —— 点号字段名（'.catch'、
+ * '$if_.elif'、'.end'），处在标识符位置而非子句/运算符位置，不触发
+ * 任何语法记账或断点。'. catch'（点号后带空格）是身份后跟子句关键
+ * 字，不在其列 —— 邻接性由行号与列号判定。
+ */
+function isDotField(tokens: readonly FmtToken[], k: number): boolean {
+  const t = tokens[k]
+  if (t.type !== 'keyword') return false
+  const p = tokens[k - 1]
+  return (
+    p !== undefined &&
+    p.type === 'operator' &&
+    p.text === '.' &&
+    p.line === t.line &&
+    endCol(p) === t.col
+  )
+}
+
+/**
  * 词法 token 的一次性注释化。tokens 是标好一元负号的 token 序列；
  * match 把每个开括号下标映射到配对闭括号下标；objectKey[k] 标记
  * tokens[k] 是否为作对象键的关键字（如 `{if: 1}`，见 spacing.ts 的
- * isObjectKey）。三者都是纯 token 派生信息，预算一次、处处复用。
+ * isObjectKey）；afterDot[k] 标记 tokens[k] 是否为点号字段名。四者
+ * 都是纯 token 派生信息，预算一次、处处复用。
  */
 export interface TokenStream {
   readonly tokens: readonly FmtToken[]
   readonly match: ReadonlyMap<number, number>
   readonly objectKey: readonly boolean[]
+  readonly afterDot: readonly boolean[]
 }
 
 /** 从词法 token 构建 token 流；括号不配对时抛 FormatError */
@@ -101,5 +122,6 @@ export function buildStream(raw: Token[]): TokenStream {
   const tokens = annotateUnary(raw)
   const match = matchBrackets(tokens)
   const objectKey = tokens.map((_, k) => isObjectKey(tokens, k))
-  return { tokens, match, objectKey }
+  const afterDot = tokens.map((_, k) => isDotField(tokens, k))
+  return { tokens, match, objectKey, afterDot }
 }

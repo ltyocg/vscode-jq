@@ -107,10 +107,55 @@ test('if/elif/else/end clauses', () => {
   assert.equal(fmt(src), src + '\n')
 })
 
+test('if condition wraps under the if keyword', () => {
+  // 条件的折行内容（尾随运算符的操作数、行首运算符）锚到 if 关键字
+  // 列 +1 层，与分支体同层 —— 属于 if 层级，不挂到外层括号组的
+  // 运算符链上；then/else/end 仍对齐 if
+  assert.equal(
+    fmt(
+      '( $p[0] as $p0\n| if (type == "object") or\n      (type == "array") then\n    .x\n  else .y\n  end\n)'
+    ),
+    '( $p[0] as $p0\n| if (type == "object") or\n    (type == "array") then\n    .x\n  else .y\n  end\n)\n'
+  )
+  assert.equal(
+    fmt(
+      '( $p[0] as $p0\n| if (type == "object")\n      or (type == "array") then\n  else .y\n  end\n)'
+    ),
+    '( $p[0] as $p0\n| if (type == "object")\n    or (type == "array") then\n  else .y\n  end\n)\n'
+  )
+})
+
+test('dot field names are not clause keywords', () => {
+  // '.end'、'$if_.elif' 是字段访问，不触发子句记账：else/end 对齐 if
+  const src = '( $l\n| if $l.ok then .x\n  elif $l.end then .end = true\n  else .\n  end\n)'
+  assert.equal(fmt(src), src + '\n')
+})
+
 test('try/catch', () => {
   assert.equal(fmt('try .a catch .b'), 'try .a catch .b\n')
   const src = 'try .a\ncatch .b'
   assert.equal(fmt(src), 'try .a\ncatch .b\n')
+  // 源码在 try 之后换行：body 另起一行，比 try 所在层深一层；catch
+  // 仍与 try 对齐；body 里的 if/else/end 照常工作
+  assert.equal(fmt('try\n  (lex | parse)'), 'try\n  (lex | parse)\n')
+  assert.equal(fmt('try\n  (lex | parse)\ncatch\n  .'), 'try\n  (lex | parse)\ncatch\n  .\n')
+  assert.equal(
+    fmt('try\n  if .a then .b\n  else .c\n  end'),
+    'try\n  if .a then .b\n  else .c\n  end\n'
+  )
+  // try 的 body 缩进锚到 try 关键字列（管道行内 'try' 在第 4 列）
+  assert.equal(fmt('| try\n    _e(.)'), '| try\n    _e(.)\n')
+})
+
+test('as binding pattern on its own line', () => {
+  // 源码在 as 之后换行：绑定模式另起一行，比操作数表达式的起始列深
+  // 一层（'| $query' 的操作数从第 2 列起）
+  assert.equal(fmt('| $query as\n    { term: 1 }'), '| $query as\n    {term: 1}\n')
+  // 操作数是调用表达式时锚到函数名列（'map' 从第 2 列起）
+  assert.equal(fmt('| map(.x) as\n    { a }'), '| map(.x) as\n    {a}\n')
+  // 同行不换行；对象键的 try/as 不受影响
+  assert.equal(fmt('.x as $v | $v'), '.x as $v | $v\n')
+  assert.equal(fmt('{try: 1, as: 2}'), '{try: 1, as: 2}\n')
 })
 
 test('reduce / foreach / label / break', () => {
@@ -420,17 +465,18 @@ test('single-key object with an internally breaking value stays hanging', () => 
 
 test('trailing-style binop and pipe breaks are preserved', () => {
   // 运算符留在行尾的折行（尾随风格）与行首风格同样尊重源码：
-  // 双目运算符之后的操作数与本行同层，管道之后深一层
+  // 双目运算符之后的操作数与本行同层，管道之后深一层；if 条件里的
+  // 折行改锚条件层（if 关键字列 +1 层，见下方专项测试）
   assert.equal(
     fmt('if $op | . == "=" or\n  . == "|=" or\n  . == "+=" then 1 else 2 end'),
-    'if $op | . == "=" or\n. == "|=" or\n. == "+=" then 1 else 2 end\n'
+    'if $op | . == "=" or\n  . == "|=" or\n  . == "+=" then 1 else 2 end\n'
   )
   assert.equal(fmt('.a //\n  .b'), '.a //\n.b\n')
   assert.equal(fmt('.a |\n  b'), '.a |\n  b\n')
-  // 行首风格（运算符提到下一行行首）行为不变
+  // 行首风格（运算符提到下一行行首）在 if 条件里同样锚条件层
   assert.equal(
     fmt('if $op | . == "="\n  or . == "|="\n  or . == "+=" then 1 else 2 end'),
-    'if $op | . == "="\nor . == "|="\nor . == "+=" then 1 else 2 end\n'
+    'if $op | . == "="\n  or . == "|="\n  or . == "+=" then 1 else 2 end\n'
   )
   // 源码未换行：不主动断行
   assert.equal(fmt('.a // .b'), '.a // .b\n')
