@@ -67,7 +67,7 @@ interface GroupCtx {
 /** if/try 子句的布局上下文 */
 interface ClauseCtx {
   kind: 'if' | 'try'
-  /** 'if'/'try' 所在行的缩进列数 */
+  /** 'if'/'try' 关键字所在列（可能处在行中间，如 '| if' 的 'if'） */
   indent: number
 }
 
@@ -319,7 +319,7 @@ export class Layout {
         }
         break
       case 'clause':
-        // 子句关键字：源码有换行或行宽不够时，回到 if/try 所在行的行首
+        // 子句关键字：源码有换行或行宽不够时，回到 if/try 关键字所在列
         if (!inlineInnermost && (nl > 0 || this.#m.clauseOverflow(i))) {
           indent = this.#findClauseIndent(t.text === 'catch' ? 'try' : 'if') ?? this.#ctxIndent
         }
@@ -493,10 +493,12 @@ export class Layout {
             ? this.#groups.length
             : null
       } else if (t.text === 'if') {
-        this.#clauses.push({ kind: 'if', indent: this.#out.indentCols })
+        // 关键字刚发射完毕：其起始列 = 当前行末列减去自身宽度。
+        // 子句关键字（then/elif/else/end）与它竖向对齐
+        this.#clauses.push({ kind: 'if', indent: this.#out.col() - t.text.length })
         this.#bodyIndent = null
       } else if (t.text === 'try') {
-        this.#clauses.push({ kind: 'try', indent: this.#out.indentCols })
+        this.#clauses.push({ kind: 'try', indent: this.#out.col() - t.text.length })
         this.#bodyIndent = null
       } else if (t.text === 'then' || t.text === 'else') {
         // 进入 if 分支：分支内容比「子句关键字所在层与上下文层的
@@ -536,7 +538,7 @@ export class Layout {
 
   // -- 子句栈 --------------------------------------------------------------
 
-  /** 最近的 kind 子句所在行的缩进；没有则为 null。 */
+  /** 最近的 kind 子句关键字的起始列；没有则为 null。 */
   #findClauseIndent(kind: 'if' | 'try'): number | null {
     for (let p = this.#clauses.length - 1; p >= 0; p--) {
       if (this.#clauses[p].kind === kind) return this.#clauses[p].indent

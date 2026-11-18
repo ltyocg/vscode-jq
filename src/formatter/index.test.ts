@@ -325,7 +325,7 @@ test('elements that break internally stay on the separator line', () => {
   // 不在分隔符后强行另起一行，避免分隔符孤零零留在行尾
   assert.equal(
     fmt('{ a: 1\n, key:\n    ( if x then y\n       else z\n       end\n     )\n}'),
-    '{ a: 1\n, key:\n    ( if x then y\n    else z\n    end\n    )\n}\n'
+    '{ a: 1\n, key:\n    ( if x then y\n      else z\n      end\n    )\n}\n'
   )
 })
 

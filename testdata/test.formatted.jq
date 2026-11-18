@@ -108,8 +108,8 @@ def lex:
         , remain: $remain[length:]
         , string_stack:
           ( if $token.string_stack == null then $string_stack
-          else $token.string_stack
-          end
+            else $token.string_stack
+            end
           )
         }
       );
@@ -216,8 +216,8 @@ def parse:
     ( . as $c
     | [_f]
     | if length > 0 then [.[-1][0], map(.[1])]
-    else [$c, []]
-    end
+      else [$c, []]
+      end
     );
   def _keyword($name): _consume(.ident == $name)[0];
 
@@ -264,13 +264,13 @@ def parse:
           | if $next_op and $next_op.prec >= $p then
               ( .[1:] # consume
               | ( if $next_op.assoc == "right" then
-                  _op_prec_climb($next_op.prec; filter)
-              elif $next_op.assoc == "left" then
-                  _op_prec_climb($next_op.prec + 1; filter)
-              else
-                  # TODO: none associativity, 1 == 2 == 3 etc, should be error
-                  _op_prec_climb($next_op.prec + 1; filter)
-              end
+                    _op_prec_climb($next_op.prec; filter)
+                  elif $next_op.assoc == "left" then
+                    _op_prec_climb($next_op.prec + 1; filter)
+                  else
+                    # TODO: none associativity, 1 == 2 == 3 etc, should be error
+                    _op_prec_climb($next_op.prec + 1; filter)
+                  end
                 ) as [$rest, $t1]
               | $rest
                 # TODO: better way?
@@ -285,14 +285,14 @@ def parse:
                   }
                 | if $func_defs then
                     .func_defs = $func_defs
-                else .
-                end
+                  else .
+                  end
                 )
               )
               )
-          else
+            else
               [., $t]
-          end
+            end
           );
         _f($t)
       );
@@ -385,14 +385,14 @@ def parse:
           ) as [$rest, $key_vals]
         | $rest
         | ( if .[0].rcurly then
-            # keep it to make repeat finish and consumed it below
-            [$rest, null]
-        else
-            # or there must be a comma
-            ( _consume(.comma) as [$rest, $_]
-            | [$rest, null]
-            )
-        end
+              # keep it to make repeat finish and consumed it below
+              [$rest, null]
+            else
+              # or there must be a comma
+              ( _consume(.comma) as [$rest, $_]
+              | [$rest, null]
+              )
+            end
           ) as [$rest, $_]
         | [$rest, $key_vals]
         )
@@ -478,14 +478,14 @@ def parse:
             ) as [$rest, $key_patterns]
           | $rest
           | ( if .[0].rcurly then
-              # keep it to make repeat finish and consumed it below
-              [$rest, null]
-          else
-              # or there must be a comma
-              ( _consume(.comma) as [$rest, $_]
-              | [$rest, null]
-              )
-          end
+                # keep it to make repeat finish and consumed it below
+                [$rest, null]
+              else
+                # or there must be a comma
+                ( _consume(.comma) as [$rest, $_]
+                | [$rest, null]
+                )
+              end
             ) as [$rest, $_]
           | [$rest, $key_patterns]
           )
@@ -721,8 +721,8 @@ def parse:
                   , else: $else_
                   }
                 | if ($elif_ | length) > 0 then . elif = $elif_
-                else .
-                end
+                  else .
+                  end
                 )
             }
           }
@@ -999,8 +999,8 @@ def parse:
                 [ {term: {str: $string_start, type: "TermTypeString"}}
                 , ( $queries[]
                   | if .term and .term.type == "TermTypeString" then .
-                  else {term: {query: ., type: "TermTypeQuery"}}
-                  end
+                    else {term: {query: ., type: "TermTypeQuery"}}
+                    end
                   )
                 , {term: {str: $string_end, type: "TermTypeString"}}
                 ]
@@ -1122,10 +1122,10 @@ def parse:
     ( . #debug({_p: $type, dot: .})
     | if $type == "query" then
         _op_prec_climb(0; false)
-    elif $type == "keyval_query" then
+      elif $type == "keyval_query" then
         # keyval query only allows | operator
         _op_prec_climb(0; .pipe | not)
-    elif $type == "query1" then
+      elif $type == "query1" then
         # used by _op_prec_climb, exist to fix infinite recursion
         # does not include infix operators
         ( _p("func_defs") as [$rest, $func_defs]
@@ -1134,11 +1134,11 @@ def parse:
         | $query
         | if ($func_defs | length) > 0 then
             .func_defs = $func_defs
-        else .
-        end
+          else .
+          end
         | [$rest, .]
         )
-    elif $type == "term" then
+      elif $type == "term" then
         # "keyword" ident parsing first
         ( ( _p("if")
           // _p("reduce")
@@ -1169,39 +1169,39 @@ def parse:
         | [ .
           , ( $term
             | if ($suffix_list | length) > 0 then
-              .term.suffix_list = $suffix_list
-            else .
-            end
+                .term.suffix_list = $suffix_list
+              else .
+              end
             )
           ]
         )
-    elif $type == "suffix" then _suffix
-    elif $type == "if" then _if
-    elif $type == "func_defs" then _func_defs
-    elif $type == "true" then _scalar("TermTypeTrue"; .ident == "true"; .)
-    elif $type == "false" then _scalar("TermTypeFalse"; .ident == "false"; .)
-    elif $type == "null" then _scalar("TermTypeNull"; .ident == "null"; .)
-    elif $type == "number" then _scalar("TermTypeNumber"; .number; {number: .number})
-    elif $type == "string" then _string
-    elif $type == "format_string" then _format_string
-    elif $type == "index" then _index
-    elif $type == "identity" then _identity
-    elif $type == "array" then _array
-    elif $type == "object" then _object
-    elif $type == "subquery" then _subquery
-    elif $type == "func" then _func
-    elif $type == "binding" then _binding
-    elif $type == "reduce" then _reduce
-    elif $type == "foreach" then _foreach
-    elif $type == "try" then _try
-    elif $type == "label" then _label
-    elif $type == "break" then _break
-    elif $type == "unary_plus" then _unary_op(.plus; "+")
-    elif $type == "unary_minus" then _unary_op(.dash; "-")
-    elif $type == "recurse" then _recurse
-    elif $type == "pattern" then _pattern
-    else error("unknown type \($type)")
-    end
+      elif $type == "suffix" then _suffix
+      elif $type == "if" then _if
+      elif $type == "func_defs" then _func_defs
+      elif $type == "true" then _scalar("TermTypeTrue"; .ident == "true"; .)
+      elif $type == "false" then _scalar("TermTypeFalse"; .ident == "false"; .)
+      elif $type == "null" then _scalar("TermTypeNull"; .ident == "null"; .)
+      elif $type == "number" then _scalar("TermTypeNumber"; .number; {number: .number})
+      elif $type == "string" then _string
+      elif $type == "format_string" then _format_string
+      elif $type == "index" then _index
+      elif $type == "identity" then _identity
+      elif $type == "array" then _array
+      elif $type == "object" then _object
+      elif $type == "subquery" then _subquery
+      elif $type == "func" then _func
+      elif $type == "binding" then _binding
+      elif $type == "reduce" then _reduce
+      elif $type == "foreach" then _foreach
+      elif $type == "try" then _try
+      elif $type == "label" then _label
+      elif $type == "break" then _break
+      elif $type == "unary_plus" then _unary_op(.plus; "+")
+      elif $type == "unary_minus" then _unary_op(.dash; "-")
+      elif $type == "recurse" then _recurse
+      elif $type == "pattern" then _pattern
+      else error("unknown type \($type)")
+      end
     );
   ( ( map(select((.whitespace or .comment) | not))
     | _p("query")
@@ -1227,21 +1227,21 @@ def _tojson_stream($opts):
     else .
     end;
   ( ( if $opts.print_pretty | not then ["", "", ""]
-  elif $opts.indent == "tab" then ["\t", " ", "\n"]
-  else [$opts.indent * " ", " ", "\n"]
-  end
+      elif $opts.indent == "tab" then ["\t", " ", "\n"]
+      else [$opts.indent * " ", " ", "\n"]
+      end
     ) as [$indent, $space, $newline]
   |
     def _f($prefix):
       ( type as $t
       | if $t == "null" then "null" | _color(_c_null)
-      elif $t == "string" then tojson | _color(_c_string)
-      elif $t == "number" then tojson | _color(_c_number)
-      elif $t == "boolean" then
+        elif $t == "string" then tojson | _color(_c_string)
+        elif $t == "number" then tojson | _color(_c_number)
+        elif $t == "boolean" then
           if . then "true" | _color(_c_true)
           else "false" | _color(_c_false)
           end
-      elif $t == "array" then
+        elif $t == "array" then
           if length == 0 then "[]" | _color(_c_array)
           else
             ( ($prefix + $indent) as $elem_prefix
@@ -1254,7 +1254,7 @@ def _tojson_stream($opts):
             , $prefix, ("]" | _color(_c_array))
             )
           end
-      elif $t == "object" then
+        elif $t == "object" then
           if length == 0 then "{}" | _color(_c_object)
           else
             ( ($prefix + $indent) as $elem_prefix
@@ -1276,8 +1276,8 @@ def _tojson_stream($opts):
             , $prefix, ("}" | _color(_c_object))
             )
           end
-      else _internal_error("unknown type \($t)")
-      end
+        else _internal_error("unknown type \($t)")
+        end
       );
     _f($newline)
   );
@@ -1288,8 +1288,8 @@ def dump($opts):
       if $opts.raw_output0 and contains("\u0000") then
         error("Cannot dump a string containing NUL with --raw-output0 option")
       end
-  else _tojson_stream($opts)
-  end
+    else _tojson_stream($opts)
+    end
   , if $opts.stream_sep != null then $opts.stream_sep else empty end
   );
 
@@ -1335,13 +1335,13 @@ def eval_ast($query; $path; $env; undefined_func):
               [range($p0 + 1) | null]
             else {}
             end
-        end
+          end
         | if (type == "object" and $t == "string") or
         (type == "array" and $t == "number") then
             .[$p0] |= _f($p[1:])
-        else
+          else
             error("cannot index \(type) with \($t) \($p0)")
-        end
+          end
         )
       end;
     _f($path);
@@ -1370,29 +1370,29 @@ def eval_ast($query; $path; $env; undefined_func):
                         }
             | . as $input
             | if $name then [($query_path + [$name]), $input[$name]]
-            elif $str then [($query_path + [$str.str]), $input[$str.str]]
-            elif $is_slice then
-              ( $query_input
-              | ( if $start then _e($start; []; $query_env; $label_count)[1]
-              else 0 end
-                ) as $vs
-              | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
-              else $input | length
+              elif $str then [($query_path + [$str.str]), $input[$str.str]]
+              elif $is_slice then
+                ( $query_input
+                | ( if $start then _e($start; []; $query_env; $label_count)[1]
+                    else 0 end
+                  ) as $vs
+                | ( if $end_ then _e($end_; []; $query_env; $label_count)[1]
+                    else $input | length
+                    end
+                  ) as $ve
+                | [ [null]
+                  , $input[$vs:$ve]
+                  ]
+                )
+              elif $start then
+                ( $query_input
+                | _e($start; []; $query_env; $label_count) as [$_, $v]
+                | [ ($query_path + [$v])
+                  , $input[$v]
+                  ]
+                )
+              else . # TODO: error?
               end
-                ) as $ve
-              | [ [null]
-                , $input[$vs:$ve]
-                ]
-              )
-            elif $start then
-              ( $query_input
-              | _e($start; []; $query_env; $label_count) as [$_, $v]
-              | [ ($query_path + [$v])
-                , $input[$v]
-                ]
-              )
-            else . # TODO: error?
-            end
             )
         catch
           if $opt then empty
@@ -1415,20 +1415,20 @@ def eval_ast($query; $path; $env; undefined_func):
                 | _e($q; []; $query_env; $label_count) as [$_, $v]
                 | $v
                 | ( if $q.term.query then
-                    ( _e(
-                      { term:
-                          { type: "TermTypeFunc"
-                          , func: {name: $format_func}
-                          }
-                      };
-                      [];
-                      $query_env;
-                      $label_count
-                    ) as [$_, $v]
-                    | $v
-                    )
-                else .
-                end
+                      ( _e(
+                        { term:
+                            { type: "TermTypeFunc"
+                            , func: {name: $format_func}
+                            }
+                        };
+                        [];
+                        $query_env;
+                        $label_count
+                      ) as [$_, $v]
+                      | $v
+                      )
+                    else .
+                    end
                   ) as $v
                 | $rest
                 | _f($str_parts + [$v])
@@ -1474,15 +1474,15 @@ def eval_ast($query; $path; $env; undefined_func):
                   $env;
                   ( . as $env
                   | ( if $kv.key and ($kv.val | not) then [$kv.key[1:], {name: $kv.key}]
-                  elif $kv.key then [$kv.key, $kv.val]
-                  elif $kv.key_string then [$kv.key_string.str, $kv.val]
-                  elif $kv.key_query then
-                      # TODO: {a: 1, b: 2} as {("a","b"): $a} | $a -> 1, 2, probably can't use reduce
-                      ( _e($kv.key_query; $path; $query_env; $label_count)[1]
-                      | [., $kv.val]
-                      )
-                  else _internal_error("unreachable")
-                  end
+                      elif $kv.key then [$kv.key, $kv.val]
+                      elif $kv.key_string then [$kv.key_string.str, $kv.val]
+                      elif $kv.key_query then
+                        # TODO: {a: 1, b: 2} as {("a","b"): $a} | $a -> 1, 2, probably can't use reduce
+                        ( _e($kv.key_query; $path; $query_env; $label_count)[1]
+                        | [., $kv.val]
+                        )
+                      else _internal_error("unreachable")
+                      end
                     ) as [$key, $val]
                   | $val
                   | _f($input[$key]; $env)
@@ -1502,8 +1502,8 @@ def eval_ast($query; $path; $env; undefined_func):
           .;
           ( $query.term.suffix_list
           | if . != null then .[0].optional
-          else false
-          end
+            else false
+            end
           )
         );
 
@@ -1513,11 +1513,11 @@ def eval_ast($query; $path; $env; undefined_func):
             ( . as $v
             | .term.type
             | if . == "TermTypeNull" then null
-            elif . == "TermTypeTrue" then true
-            elif . == "TermTypeFalse" then false
-            elif . == "TermTypeString" then $v.term.str
-            elif . == "TermTypeNumber" then $v.term.number | tonumber
-            elif . == "TermTypeObject" then
+              elif . == "TermTypeTrue" then true
+              elif . == "TermTypeFalse" then false
+              elif . == "TermTypeString" then $v.term.str
+              elif . == "TermTypeNumber" then $v.term.number | tonumber
+              elif . == "TermTypeObject" then
                 ( $v.term.object.key_vals // []
                 | map(
                   { key: .key_string.str
@@ -1526,12 +1526,12 @@ def eval_ast($query; $path; $env; undefined_func):
                 )
                 | from_entries
                 )
-            elif . == "TermTypeArray" then
+              elif . == "TermTypeArray" then
                 ( def _a: if .op then .left, .right | _a end;
                   [$v.term.array.query // empty | _a | _f]
                 )
-            else _internal_error("unknown term")
-            end
+              else _internal_error("unknown term")
+              end
             );
           try (lex | parse | _f)
           catch
@@ -1542,7 +1542,7 @@ def eval_ast($query; $path; $env; undefined_func):
         | func_name($name; $args) as $name
         | $query_env[$name] as $e
         | if $e | has("value") then [[null], $e.value]
-        elif $e.body then
+          elif $e.body then
             ( ($e.args // []) as $func_args
             | ($args // []) as $call_args
             | ( $func_args
@@ -1565,8 +1565,8 @@ def eval_ast($query; $path; $env; undefined_func):
               # if not lambda inject the function in it's own env to allow recursion
               # TODO: find a better way
             | ( if $e.lambda then {}
-            else {($name): $e}
-            end
+                else {($name): $e}
+                end
               ) as $self_env
             | $func_args
             | to_entries
@@ -1594,7 +1594,7 @@ def eval_ast($query; $path; $env; undefined_func):
                 | ($e.env + $bindings_env + $lambda_env + $self_env) as $call_env
                 | _e($e.body; $path; $call_env; $label_count)
             )
-        else
+          else
             ( def a0: _e($args[0]; $path; $query_env; $label_count)[1];
               def a1: _e($args[1]; $path; $query_env; $label_count)[1];
               def a2: _e($args[2]; $path; $query_env; $label_count)[1];
@@ -1646,8 +1646,8 @@ def eval_ast($query; $path; $env; undefined_func):
                 | if $p | length > 0 and first == null then
                     # TODO: include path and value?
                     error("invalid path expression")
-                else .
-                end
+                  else .
+                  end
                 | [[null], $p]
                 )
               elif $name == "acos/0" then [[null], acos]
@@ -1728,7 +1728,7 @@ def eval_ast($query; $path; $env; undefined_func):
                 )
               end
             )
-        end
+          end
         );
 
       # transform key_vals into array of [<key>, <val>] pairs and fill in optional key query if needed.
@@ -1746,51 +1746,51 @@ def eval_ast($query; $path; $env; undefined_func):
               };
             . as $kv
               | if $kv.key then
-                [ ( $kv.key
-                  | if startswith("$") then .[1:] else . end
-                  | _term_str
-                  )
-                , ( $kv.val.queries[0]
-                  //
-                    ( $kv.key
-                    | if startswith("$") then
-                        { term:
-                            { type: "TermTypeFunc"
-                            , func: {name: .}
-                            }
-                        }
-                    else
-                        { term:
-                            { type: "TermTypeIndex"
-                            , index: {name: .}
-                            }
-                        }
-                    end
-                    )
-                  )
-                ]
-              elif $kv.key_string then
-                ( [ ( $kv.key_string.str
+                  [ ( $kv.key
+                    | if startswith("$") then .[1:] else . end
                     | _term_str
                     )
                   , ( $kv.val.queries[0]
                     //
-                      { term:
-                          { type: "TermTypeIndex"
-                          , index:
-                              { name: $kv.key_string.str
+                      ( $kv.key
+                      | if startswith("$") then
+                          { term:
+                              { type: "TermTypeFunc"
+                              , func: {name: .}
                               }
                           }
-                      }
+                        else
+                          { term:
+                              { type: "TermTypeIndex"
+                              , index: {name: .}
+                              }
+                          }
+                        end
+                      )
                     )
                   ]
-                )
-              elif $kv.key_query then
-                [ $kv.key_query
-                , $kv.val.queries[0]
-                ]
-              else _internal_error("unknown object key")
-              end
+                elif $kv.key_string then
+                  ( [ ( $kv.key_string.str
+                      | _term_str
+                      )
+                    , ( $kv.val.queries[0]
+                      //
+                        { term:
+                            { type: "TermTypeIndex"
+                            , index:
+                                { name: $kv.key_string.str
+                                }
+                            }
+                        }
+                      )
+                    ]
+                  )
+                elif $kv.key_query then
+                  [ $kv.key_query
+                  , $kv.val.queries[0]
+                  ]
+                else _internal_error("unknown object key")
+                end
           )
         )
         |
@@ -1833,16 +1833,16 @@ def eval_ast($query; $path; $env; undefined_func):
             | [.cond, . then]
             )
           , if $if_. else then
-            # else <then> end -> else true then <then> end
-            [ {term: {type: "TermTypeTrue"}}
-            , $if_. else
-            ]
-          else
-            # end -> else true then . end
-            [ {term: {type: "TermTypeTrue"}}
-            , {term: {type: "TermTypeIdentity"}}
-            ]
-          end
+              # else <then> end -> else true then <then> end
+              [ {term: {type: "TermTypeTrue"}}
+              , $if_. else
+              ]
+            else
+              # end -> else true then . end
+              [ {term: {type: "TermTypeTrue"}}
+              , {term: {type: "TermTypeIdentity"}}
+              ]
+            end
           ]
         |
           def _f:
@@ -1855,8 +1855,8 @@ def eval_ast($query; $path; $env; undefined_func):
                 ( $input
                 | _e($then_; $path; $query_env; $label_count)
                 )
-            else .[1:] | _f
-            end
+              else .[1:] | _f
+              end
             );
           _f
         );
@@ -1924,7 +1924,7 @@ def eval_ast($query; $path; $env; undefined_func):
           # TODO: will catch jqjq bugs causing error
           # do own backtracking? sentinel value somehow?
         | try _e($body; $path; $query_env; $label_count)
-        catch
+          catch
             if _is_internal_error or _is_internal_break then error
             else _e($catch_; $path; $query_env; $label_count)
             end
@@ -1939,7 +1939,7 @@ def eval_ast($query; $path; $env; undefined_func):
           $query_env + {("@label-" + $ident): $label_count};
           $label_count + 1
         )
-        catch
+          catch
             if _is_internal_break and _unwrap_internal_break == $label_count then empty
             else error
             end
@@ -1950,9 +1950,9 @@ def eval_ast($query; $path; $env; undefined_func):
         | ("@label-" + $ident) as $label_ident
         | if $query_env | has($label_ident) then
             _internal_break($query_env[$label_ident])
-        else
+          else
             {name: $ident} | undefined_func_error
-        end
+          end
         );
 
       def _unary:
@@ -1983,7 +1983,7 @@ def eval_ast($query; $path; $env; undefined_func):
               $label_count
             )
             )
-        elif $suffix.index then
+          elif $suffix.index then
             # .<index>
             try ( $v
                 | _e_index($suffix.index; $p; $input; $opt)
@@ -1993,7 +1993,7 @@ def eval_ast($query; $path; $env; undefined_func):
               if $opt then empty
               else error
               end
-        elif $suffix.iter then
+          elif $suffix.iter then
             # .[]
             try ( $v
                 | keys[] as $key
@@ -2003,8 +2003,8 @@ def eval_ast($query; $path; $env; undefined_func):
               if $opt then empty
               else error
               end
-        else _internal_error("unknown suffix: \($suffix)")
-        end
+          else _internal_error("unknown suffix: \($suffix)")
+          end
         );
 
       def _e_suffix_list($input; $path):
@@ -2020,7 +2020,7 @@ def eval_ast($query; $path; $env; undefined_func):
               | _e_suffix($suffix_list[0]; $path; $input; $opt)
               | _f($n)
               )
-              end;
+                             end;
           _f($suffix_list)
         );
 
@@ -2051,14 +2051,14 @@ def eval_ast($query; $path; $env; undefined_func):
         if $optional or $query.term.suffix_list then
           ( . as $input
           | try _e_type
-          catch
+            catch
               if _is_internal_error then error # forward internal eror
               elif $optional then empty # query?
               else error
               end
           | if $query.term.suffix_list then _e_suffix_list($input; $path)
-          else .
-          end
+            else .
+            end
           )
         else _e_type
         end
@@ -2615,13 +2615,13 @@ def builtin_undefined_func($globals; $builtins_env):
       else
         undefined_func_error
       end
-  elif $f.name == "env/0" then
+    elif $f.name == "env/0" then
       [[null], $globals["$ENV"]]
-  elif $f.name == "input/0" then
+    elif $f.name == "input/0" then
       [[null], input]
-  elif $f.name == "inputs/0" then
+    elif $f.name == "inputs/0" then
       inputs | [[null], .]
-  elif $f.name == "eval/1" then
+    elif $f.name == "eval/1" then
       # behaves as eval($expr)
       ( $f.input
       | eval_ast(
@@ -2638,14 +2638,14 @@ def builtin_undefined_func($globals; $builtins_env):
         builtin_undefined_func($globals; $builtins_env)
       ) as [$path, $value]
       | [ if $path == [null] then $path
-      else $f.path + $path
-      end
+          else $f.path + $path
+          end
         , $value
         ]
       )
-  else
+    else
       undefined_func_error
-  end
+    end
   );
 
 def eval($expr; $globals; $builtins_env):
@@ -2661,8 +2661,8 @@ def eval($expr; $globals; $builtins_env):
     # $ gojq -cn -L . 'include "jqjq"; {} | {a:1} | eval(".a") += 1'
     # {"a":2}
   | if $path | . == [] or .[0] == null then $value
-  else getpath($path)
-  end
+    else getpath($path)
+    end
   );
 def eval($expr):
   eval($expr; {}; _builtins_env);
@@ -2712,12 +2712,12 @@ def parse_options:
           .args.curr |= (.[$short | length:] | if length == 0 then null end)
         else empty
         end
-    else
+      else
         if .args.curr == $long then
           .args.curr = null
         else empty
         end
-    end
+      end
     | on_option
     );
   def handle_library_path:
@@ -2755,7 +2755,7 @@ def parse_options:
       | if .program_args.named | has($key) | not then
           # jq parses values only of the first occurrence of each key
           .program_args.named[$key] = {type: $option, $value}
-      end
+        end
       )
     end;
   def handle_jq:
@@ -2827,17 +2827,17 @@ def parse_options:
         else
           .files += [$arg]
         end
-    elif $arg == "--" then
+      elif $arg == "--" then
         .args.done = true
-    else
+      else
         ( if $arg | startswith("--") then
             .args.curr = $arg[2:] | .args.is_short = false
-        else
+          else
             .args.curr = $arg[1:] | .args.is_short = true
-        end
+          end
         | parse_options_in_arg
         )
-    end
+      end
     );
   def parse_args:
     if (.args.rest | length > 0) and .action == null then
@@ -2869,9 +2869,9 @@ def construct_jqjq_command:
   | ($jq | test("(^|[/\\\\])(gojq|jaq)[^/\\\\]*$") | not) as $host_is_jq
   | [ ($jq | sh_escape)
     , if .action == "run-tests" then "-nsRr"
-    elif .mode == "repl" then "-njR"
-    else "-nj"
-    end
+      elif .mode == "repl" then "-njR"
+      else "-nj"
+      end
     # only jq supports --unbuffered and --binary, not gojq or jaq
     , if .unbuffered_output and $host_is_jq then "--unbuffered" else empty end
     , if .binary_input_output and $host_is_jq then "--binary" else empty end
@@ -2903,16 +2903,16 @@ def jqjq($args; $env):
         ( ($env.JQ_COLORS | split(":")[:8]) as $custom
         | if $custom | all(test("^[0-9;]*$")) then
             $custom + $default[$custom | length:]
-        else
+          else
             "Failed to set $JQ_COLORS\n" | stderr | $default
-        end
+          end
         )
-    else $default
-    end
+      else $default
+      end
     | if $opts.no_color_output or
     (($opts.color_output | not) and ($env.NO_COLOR | . != null and . != "")) then
         null
-    end
+      end
     | if . != null then map("\u001b[\(.)m") end
     );
 
@@ -2929,7 +2929,7 @@ def jqjq($args; $env):
       | .value
       | if $type == "argjson" then
           try fromjson catch ("invalid JSON text passed to --jsonargs: \(.)\n" | die)
-      end
+        end
       )
     )
     | .program_args.named
@@ -2940,9 +2940,9 @@ def jqjq($args; $env):
         ( .value
         | if $type == "argjson" then
             try fromjson catch ("invalid JSON text passed to --argjson: \(.)\n" | die)
-        elif $type == "rawfile" then get_file
-        elif $type == "slurpfile" then "--slurpfile" | TODO
-        end
+          elif $type == "rawfile" then get_file
+          elif $type == "slurpfile" then "--slurpfile" | TODO
+          end
         )
       )
       )
@@ -2965,13 +2965,13 @@ def jqjq($args; $env):
         end;
     ( _parse_opts($opts; $env) as $opts
     | ( if $opts.no_builtins then {}
-    else _builtins_env
-    end
+        else _builtins_env
+        end
       ) as $builtins_env
     | _repeat_break(
       ( "> "
       , ( try input
-      catch error("break")
+          catch error("break")
         | . as $expr
         | null
         | try ( ( eval($expr; {"$ENV": $env}; $builtins_env)
@@ -2979,8 +2979,8 @@ def jqjq($args; $env):
                 )
               , if $opts.raw_no_lf then "\n" else empty end
               )
-        catch
-          "error: \(.)\n"
+          catch
+            "error: \(.)\n"
         )
       )
     )
@@ -3011,10 +3011,10 @@ def jqjq($args; $env):
             | .emit = null
             | .error = null
             )
-        else .
-        end
+          else .
+          end
         | if $l | test("^\\s*#") then .
-        elif $l | test("^\\s*$") then
+          elif $l | test("^\\s*$") then
             if .expr then
               ( .emit =
               { line
@@ -3029,9 +3029,9 @@ def jqjq($args; $env):
               )
             else .
             end
-        elif $l | test("^\\s*%%FAIL") then
+          elif $l | test("^\\s*%%FAIL") then
             .fail = $l
-        else
+          else
             if .expr == null then
               ( .line = .current_line
               | .expr = $l
@@ -3040,7 +3040,7 @@ def jqjq($args; $env):
             elif .input == null then .input = $l
             else .output += [$l]
             end
-        end
+          end
         );
         if .emit then .emit
         else empty
@@ -3053,13 +3053,13 @@ def jqjq($args; $env):
       | _from_jqtest[]
       | . as $c
       | try if .error | not then
-          ( ( .input
-            , .output[]
-            ) |= fromjson
-          )
-      else .
-      end
-      catch
+              ( ( .input
+                , .output[]
+                ) |= fromjson
+              )
+            else .
+            end
+        catch
           ( . as $err
           | $c
           | .fromjson_error = $err
@@ -3078,18 +3078,18 @@ def jqjq($args; $env):
               | $value
               ] as $actual_output
             | if $test.output == $actual_output then
-              ( "OK: \($test_name)"
-              , {ok: true}
-              )
-            else
-              ( "DIFF: \($test_name)"
-              , "  Expected: \($test.output | _to_unslurped)"
-              , "    Actual: \($actual_output | _to_unslurped)"
-              , {error: true}
-              )
-            end
+                ( "OK: \($test_name)"
+                , {ok: true}
+                )
+              else
+                ( "DIFF: \($test_name)"
+                , "  Expected: \($test.output | _to_unslurped)"
+                , "    Actual: \($actual_output | _to_unslurped)"
+                , {error: true}
+                )
+              end
             )
-      catch
+        catch
           if $test.fail then
             if . == $test.error then
               ( "OK: \($test_name)"
@@ -3117,8 +3117,8 @@ def jqjq($args; $env):
       if ($l | type) == "object" then
         ( .line = false
         | if $l.error then .errors += 1
-        elif $l.ok then .oks += 1
-        elif $l. end then . end = true
+          elif $l.ok then .oks += 1
+          elif $l. end then . end = true
             else .
             end
         )
@@ -3150,8 +3150,8 @@ def jqjq($args; $env):
             }
           ) as $globals
         | ( if $opts.no_builtins then {}
-        else _builtins_env
-        end
+            else _builtins_env
+            end
           ) as $builtins_env
         | _inputs
         | eval($opts.program; $globals; $builtins_env)
@@ -3160,10 +3160,10 @@ def jqjq($args; $env):
 
   ( ($args | parse_options) as $opts
   | if $opts.action == "help" then usage
-  elif $opts.mode == "lex" then $opts.program | lex, "\n"
-  elif $opts.mode == "parse" then $opts.program | lex | parse, "\n"
-  elif $opts.mode == "repl" then _repl($opts)
-  elif $opts.action == "run-tests" then input | _run_tests
-  else _filter($opts)
-  end
+    elif $opts.mode == "lex" then $opts.program | lex, "\n"
+    elif $opts.mode == "parse" then $opts.program | lex | parse, "\n"
+    elif $opts.mode == "repl" then _repl($opts)
+    elif $opts.action == "run-tests" then input | _run_tests
+    else _filter($opts)
+    end
   );
