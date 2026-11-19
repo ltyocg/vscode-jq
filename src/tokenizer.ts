@@ -245,8 +245,16 @@ export function tokenize(src: string): Token[] {
     }
     if (c === '"') {
       const end = scanString(src, i)
-      push('string', src.slice(i, end + 1))
+      const text = src.slice(i, end + 1)
+      push('string', text)
       i = end + 1
+      // jq 字符串字面量允许裸换行（多行字符串）；同步行号，让后续
+      // token 报告正确的位置 —— 与注释的续行处理同理
+      const lastNl = text.lastIndexOf('\n')
+      if (lastNl >= 0) {
+        for (const ch of text) if (ch === '\n') line++
+        lineStart = i - (text.length - lastNl - 1)
+      }
       continue
     }
     if (c === '@') {

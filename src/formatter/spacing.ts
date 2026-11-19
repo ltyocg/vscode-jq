@@ -1,137 +1,31 @@
 /**
- * 纯空白规则：相邻 token 之间的水平间距、一元负号标注、
- * 关键字作对象键的判定。本文件只有纯函数，不持有状态，
- * 也不涉及断行与缩进（那两件事分别归 layout.ts 与 emit.ts）。
+ * 纯空白规则：相邻 token 之间的水平间距。本文件只有纯函数，
+ * 不持有状态，也不涉及断行与缩进（那两件事分别归 printer.ts 与
+ * emit.ts）。打印器的发射路径与宽度测量（width.ts 的 flatWidth）
+ * 消费同一份规则，两侧才不会漂移。
  */
-
 import type { Token } from '../tokenizer'
 
-/** if/try 的子句关键字，断行决策中被单独对待 */
-export const CLAUSE_KEYWORDS = new Set(['then', 'elif', 'else', 'end', 'catch'])
-
 /** 开括号 */
-export const OPENERS = new Set(['(', '[', '{'])
+const OPENERS = new Set(['(', '[', '{'])
 
 /** 闭括号 */
-export const CLOSERS = new Set([')', ']', '}'])
-
-/**
- * 全部双目运算符（含 '|' 与 '?//'）：'-' 紧跟其后时只能是一元负号。
- * 单一事实来源 —— 其余运算符集合一律从这里派生，不再各自维护清单。
- */
-const BINOPS = [
-  '|',
-  '//',
-  '?//',
-  '==',
-  '!=',
-  '<',
-  '<=',
-  '>',
-  '>=',
-  '+',
-  '-',
-  '*',
-  '/',
-  '%',
-  '=',
-  '|=',
-  '+=',
-  '-=',
-  '*=',
-  '/=',
-  '%=',
-  '//='
-] as const
-
-const BINOP_SET = new Set<string>(BINOPS)
-
-/**
- * 可作行首断点的双目运算符：源码换行处保留、超宽时以行首运算符
- * 折行。'|' 另有行首管道规则，'?//' 是解构语法，均不在其中。
- */
-export const LINE_BREAK_BINOPS = new Set<string>(BINOPS.filter((op) => op !== '|' && op !== '?//'))
+const CLOSERS = new Set([')', ']', '}'])
 
 /**
  * 格式化器内部的 token：在 tokenizer 的纯词法信息之上，额外标注了
- * 每个 '-' 是否为一元负号（见 annotateUnary）。
+ * 每个 '-'/'+' 是否为一元（由解析器的一元词项结构给出，见
+ * parser/parse.ts 的 unaryAt）。
  */
 export interface FmtToken extends Token {
   unary: boolean
 }
 
 /**
- * 括号组的布局风格子集 —— layout.ts 的 GroupCtx 中与内侧补位有关的
- * 两个字段。null 表示不在任何括号组内。
- */
-export interface BracketStyle {
-  /** 是否展开为多行 */
-  expanded: boolean
-  /** 悬挂式（开括号后接了内容） */
-  hanging: boolean
-}
-
-/**
- * 括号内侧是否补一个空格（空组除外）：各种括号一致 —— 只有悬挂式
- * 展开组（开括号后接内容）补，开括号之后、与内容同行的闭括号之前
- * 各恰好一个；单行组（含对象大括号）、分隔式展开组都不补。
- * 发射路径传入 token 所在组的真实风格；宽度测量（flatSpan）按单行
- * 模拟传 { expanded: false, hanging: false } —— 同一条规则服务两个
- * 上下文，宽度测量才不会与发射漂移。补空格只在 token 续在本行时
- * 生效（LineBuilder.append 在行首不加空格），断行处自然没有空格，
- * 分隔式展开组因此不受影响。
- */
-export function padsInsideBracket(
-  prev: FmtToken,
-  tk: FmtToken,
-  style: BracketStyle | null
-): boolean {
-  if (!style || !style.hanging) return false
-  const prevIsOpener = prev.type === 'operator' && OPENERS.has(prev.text)
-  const tkIsCloser = tk.type === 'operator' && CLOSERS.has(tk.text)
-  if (prevIsOpener && tkIsCloser) return false // 空组 '{}'
-  return prevIsOpener || tkIsCloser
-}
-
-/**
- * 标注每个 '-' 是一元还是双目，返回新数组，不修改输入。
- * 一元负号只影响间距（'-1' 紧贴操作数，'1 - 2' 两侧留空格），
- * 是排版问题而不是词法问题，所以由格式化器完成；tokenizer 的
- * Token 保持纯词法信息。
- */
-export function annotateUnary(tokens: Token[]): FmtToken[] {
-  let prev: Token | undefined
-  return tokens.map((t) => {
-    // 注释不参与语法上下文
-    if (t.type === 'comment') return { ...t, unary: false }
-    const ft: FmtToken = {
-      ...t,
-      unary: t.type === 'operator' && t.text === '-' && isPrefixPosition(prev)
-    }
-    prev = ft
-    return ft
-  })
-}
-
-/**
- * tokens[k] 是否是作对象键的关键字，如 `{if: 1, end: 2}` ——
- * jq 保留这些字但仍然允许它们作键。这类关键字不得触发子句断行或
- * 子句状态：`{if: …}` 不开启 if 上下文，`{end: …}` 不关闭任何
- * 上下文，`{def: …}` 不是定义。子句关键字在其他位置不可能合法地
- * 后跟 ':'，所以这个向前看是没有歧义的。
- */
-export function isObjectKey(tokens: readonly FmtToken[], k: number): boolean {
-  const t = tokens[k]
-  const n = tokens[k + 1]
-  return t.type === 'keyword' && !!n && n.type === 'operator' && n.text === ':'
-}
-
-/**
  * 能作为操作数结尾的 token：其后紧跟的 '.' 或 '[' 应当紧贴（调用与
- * 下标括号因此区别于开启新表达式的组开括号，boundExprStartCol 的
- * 回溯也要做这个区分）。
+ * 下标括号因此区别于开启新表达式的组开括号）。
  */
-export function isOperandEnd(t: Token | undefined): boolean {
+function isOperandEnd(t: Token | undefined): boolean {
   if (!t) return false
   switch (t.type) {
     case 'ident':
@@ -146,23 +40,6 @@ export function isOperandEnd(t: Token | undefined): boolean {
     default:
       return false
   }
-}
-
-/** t 之后紧跟的 '-' 是否必然是一元负号。 */
-function isPrefixPosition(t: Token | undefined): boolean {
-  if (!t) return true // 文件开头
-  if (t.type === 'operator') {
-    return (
-      OPENERS.has(t.text) ||
-      t.text === ',' ||
-      t.text === ';' ||
-      t.text === ':' ||
-      t.text === '$' ||
-      BINOP_SET.has(t.text)
-    )
-  }
-  if (t.type === 'keyword') return t.text !== 'end' // `end - 1` 是双目
-  return false
 }
 
 /**
@@ -185,7 +62,7 @@ export function gapBetween(prev: FmtToken, next: FmtToken, enclosing: string): '
   // 2. 开括号之后直接紧跟
   if (prev.type === 'operator' && OPENERS.has(prev.text)) return 'none'
   // 3. 点号之后：'.foo'、'."foo"'、'.['；关键字字段名（'.catch'、'.end'、
-  //    '$if_.then'）按源码邻接保留 —— '.catch' 与 '. catch'、'.end' 与
+  //    '$if_.elif'）按源码邻接保留 —— '.catch' 与 '. catch'、'.end' 与
   //    '. end' 语义不同（字段访问 vs 身份后跟子句关键字），归一化任一
   //    方向都会改写程序
   if (prev.type === 'operator' && (prev.text === '.' || prev.text === '..')) {

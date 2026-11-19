@@ -1,60 +1,35 @@
 /**
  * jq 程序格式化器 —— 公共入口。
  *
- * 一个只处理空白的、结构感知的排版器，基于 jq 官方文法
- * (jqlang/jq src/parser.y)构建。它从不改动 token 文本，
- * 只决定空格、换行与缩进。
+ * 管线：解析（src/formatter/parser/，文法事实来源 jqlang/jq 的
+ * parser.y）→ AST → 打印（printer.ts，按 STYLE.md 的规范）。
  *
- * 风格规则：
- *  - 每层缩进 indentSize 个空格（默认 2）
- *  - 源码有换行或行宽超出 printWidth 时断行：管道以行首 '|'（缩进
- *    +1），双目运算符以行首运算符（与本行同层）的方式折行；悬挂组
- *    里挂在开括号行上的运算符链（管道与双目运算符）与开括号竖向
- *    对齐；源码已用尾随风格（运算符留在行尾）折行的位置原样保留，
- *    不改为行首风格，也不因超宽重断
- *  - 对象/数组/括号组在源码有内部换行、包含注释或超出 printWidth
- *    时展开：开括号后接了内容为悬挂式（不强制断行，保留源码换行，
- *    超宽才补断），否则每元素一行
- *  - if/try 的分支内容比子句关键字所在层深一级；子句关键字（含
- *    'end'）回到 if/try 关键字所在列，竖向对齐；源码在 try 之后
- *    换行时 body 同样另起一行，比 try 所在层深一级
- *  - if/elif 条件的折行内容（尾随运算符的操作数、行首运算符、其间
- *    注释）锚到「子句关键字列与上下文层的较大者 +1 层」，与分支体
- *    同层 —— 属于子句层级，不挂到外层括号组的运算符链上
- *  - as 之后的绑定模式折行时，比操作数表达式的起始列深一级
- *    （'$query as' 的 '$query' 常在 '| ' 或 '( ' 之后，锚 token 列
- *    而非行首，模式才不会与管道链同列）
- *  - 悬挂组的前导分隔符（源码在 ','/';' 之前换行）提到行首，与
- *    开括号同列对齐；悬挂组的闭括号也回到开括号所在列（调用式
- *    开括号 'f(' 例外，回开括号所在行的行首），分隔式回到行首
- *  - 括号内侧空格（各种括号一致）：只有悬挂式展开组（开括号后接
- *    内容）补，与内容同行的开/闭括号内侧各恰好一个；单行组（含
- *    对象大括号）、分隔式与空组不补
- *  - 对象值在冒号处折行时，比键表达式的起始列深一级（键前常有
- *    '{ ' 或 ', ' 前缀，按组内容层算会让值与键同列）
- *  - 用户的换行在合法断点处保留（';' 之后、对象键冒号之后、def
- *    前后、if/try 子句附近、'|'、双目运算符（含关键字 and/or）与
- *    分隔符之前，as 绑定模式与 reduce/foreach 的 as 绑定之后，以及
- *    上述运算符之后的尾随风格），其余位置折叠
- *  - 空行原样保留、绝不凭空增加；连续两个以上的空行压缩到两个
- *  - 注释保留：独立注释独占一行，行尾注释留在行尾
+ * 只处理空白的、结构感知的排版器：从不改动 token 文本，从不增删
+ * token（例如不会补尾逗号）。风格规范见 STYLE.md；要点：
+ *  - 链（管道与双目运算符，含 and/or）断行时行首运算符，续行取
+ *    indentSize 整数倍的缩进，不做锚点列对齐；
+ *  - 括号组「展开或单行」二选一：作者展开意图保留、自身层级有注释、
+ *    平铺超宽或元素结构性多行时展开；
+ *  - if/try 子句关键字回到关键字所在缩进；
+ *  - 空行保留（上限 2）、绝不新增；注释保留（独立注释属下一行，
+ *    行尾注释留行尾）；
+ *  - `.` 与关键字字段名之间的源码邻接保留（语义守护）。
+ *
+ * 输入必须是语法合法的 jq：词法或解析错误抛 FormatError，扩展入口
+ * 据此拒绝改动文件。
  *
  * 内部模块（依赖自上而下，无环）：
- *  - api.ts       选项与错误类型（叶子模块，避免循环依赖）
- *  - spacing.ts   纯空白规则（token 间距、一元负号标注、括号内侧补位）
- *  - tokens.ts    token 流层（括号配对、对象键判定、位置算术）
- *  - breakkind.ts 断点词汇表（decide 与 predict 共用的「合法断点」分类）
+ *  - api.ts       选项与错误类型（叶子模块）
+ *  - parser/      AST 与递归下降 + Pratt 解析器
+ *  - spacing.ts   纯空白规则（token 间距）
+ *  - width.ts     宽度测量与结构性多行判定
  *  - emit.ts      行发射器（拼行、缩进、行宽）
- *  - measure.ts   行宽测量（片段试排、宽度预算）
- *  - predict.ts   源码断行推断（组风格：展开/悬挂）
- *  - layout.ts    布局决策（decide 引擎：断行、缩进、语法上下文栈）
+ *  - printer.ts   AST 打印器（断行、缩进、注释与空行冲刷）
  */
-
-import { LexError, tokenize, type Token } from '../tokenizer'
+import { parseProgram, ParseError } from './parser/parse'
+import { printProgramResult } from './printer'
+import { LexError } from '../tokenizer'
 import { FormatError, defaultFormatOptions, type FormatOptions } from './api'
-import { LineBuilder } from './emit'
-import { Layout } from './layout'
-import { buildStream } from './tokens'
 
 export { FormatError, defaultFormatOptions } from './api'
 export type { FormatOptions } from './api'
@@ -63,23 +38,19 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
   if (src.trim() === '') return src
   const opts: FormatOptions = { ...defaultFormatOptions, ...options }
 
-  let raw: Token[]
+  let parsed: ReturnType<typeof parseProgram>
   try {
-    raw = tokenize(src)
+    parsed = parseProgram(src)
   } catch (e) {
-    if (e instanceof LexError) throw new FormatError(`cannot format: ${e.message}`)
+    if (e instanceof LexError || e instanceof ParseError) {
+      const at = e instanceof ParseError ? ` (line ${e.line + 1})` : ''
+      throw new FormatError(`cannot format: ${e.message}${at}`)
+    }
     throw e
   }
-  if (raw.length === 0) return src
-
-  // 预处理：一元负号标注、括号配对、对象键判定，一次性完成。
-  // 词法错误与结构错误统一以 FormatError 抛出，调用方(extension.ts)
-  // 据此拒绝改动文件。
-  const st = buildStream(raw)
+  if (parsed.real.length === 0) return src
 
   const eol = src.includes('\r\n') ? '\r\n' : '\n'
-  const out = new LineBuilder()
-  new Layout(st, opts, out).run()
-  out.trimTrailingBlankLines()
-  return out.join(eol) + eol
+  const out = printProgramResult(parsed, opts)
+  return out + eol
 }
