@@ -67,6 +67,33 @@
         "path": "./syntaxes/jq.tmLanguage.json"
       }
     ],
+    "commands": [
+      {
+        "command": "jq.enter",
+        "title": "Smart Enter (formatter-aligned indent)",
+        "category": "jq"
+      }
+    ],
+    "keybindings": [
+      {
+        "key": "enter",
+        "command": "jq.enter",
+        "when": "editorTextFocus && resourceLangId == jq && !suggestWidgetVisible && !inSnippetMode && !renameInputVisible && !editorReadonly"
+      },
+      {
+        "key": "numpad_enter",
+        "command": "jq.enter",
+        "when": "editorTextFocus && resourceLangId == jq && !suggestWidgetVisible && !inSnippetMode && !renameInputVisible && !editorReadonly"
+      }
+    ],
+    "configurationDefaults": {
+      "[jq]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.autoClosingDelete": "always"
+      }
+    },
     "configuration": {
       "title": "jq",
       "properties": {
@@ -81,7 +108,7 @@
           "default": 2,
           "minimum": 1,
           "maximum": 8,
-          "description": "Number of spaces per indentation level."
+          "description": "Number of spaces per indentation level. Also kept in sync with the editor's tab size for jq files."
         },
         "jq.format.trailingComma": {
           "type": "string",

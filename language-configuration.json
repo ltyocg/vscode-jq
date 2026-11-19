@@ -21,7 +21,6 @@
     { "open": "\"", "close": "\"" }
   ],
   "indentationRules": {
-    "increaseIndentPattern": "^.*\\{[^}\"']*$|^.*\\[[^\\]\"']*$|^.*\\([^\\)\"']*$|^\\s*(def|if|try|reduce|foreach|label)\\b.*$",
     "decreaseIndentPattern": "^\\s*(\\}|\\]|\\)|(elif|else|end|catch)\\b).*$"
   },
   "folding": {
