@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { formatJq, FormatError, FormatOptions } from './formatter'
+import { formatJq, FormatError, FormatOptions, TrailingCommaMode } from './formatter'
 import { startJqLsp } from './lsp'
 import type { LanguageClient } from 'vscode-languageclient/node'
 
@@ -13,7 +13,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const cfg = vscode.workspace.getConfiguration('jq.format')
     return {
       printWidth: cfg.get<number>('printWidth', 100),
-      indentSize: cfg.get<number>('indentSize', 2)
+      indentSize: cfg.get<number>('indentSize', 2),
+      trailingComma: cfg.get<TrailingCommaMode>('trailingComma', 'never')
     }
   }
 

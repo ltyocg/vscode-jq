@@ -34,15 +34,21 @@ export type AnyNode = Node & { kind?: string }
 
 export class Metrics {
   readonly #flatMemo = new Map<string, number>()
+  readonly #firstLineMemo = new Map<string, number>()
   readonly #multilineMemo = new Map<unknown, boolean>()
   readonly #groupMemo = new Map<number, boolean>()
 
-  constructor(
-    private readonly tokens: Token[],
-    private readonly real: number[],
-    private readonly unaryAt: Set<number>,
-    private readonly printWidth: number
-  ) {}
+  readonly #tokens: Token[]
+  readonly #real: number[]
+  readonly #unaryAt: Set<number>
+  readonly #printWidth: number
+
+  constructor(tokens: Token[], real: number[], unaryAt: Set<number>, printWidth: number) {
+    this.#tokens = tokens
+    this.#real = real
+    this.#unaryAt = unaryAt
+    this.#printWidth = printWidth
+  }
 
   // ---- token 工具 --------------------------------------------------------
 
@@ -50,30 +56,30 @@ export class Metrics {
   nextReal(from: number): number | undefined {
     // 二分（real 有序）
     let lo = 0
-    let hi = this.real.length
+    let hi = this.#real.length
     while (lo < hi) {
       const mid = (lo + hi) >> 1
-      if (this.real[mid] < from) lo = mid + 1
+      if (this.#real[mid] < from) lo = mid + 1
       else hi = mid
     }
-    return this.real[lo]
+    return this.#real[lo]
   }
 
   /** < before 的最近实 token 原始下标 */
   prevReal(before: number): number | undefined {
     let lo = 0
-    let hi = this.real.length
+    let hi = this.#real.length
     while (lo < hi) {
       const mid = (lo + hi) >> 1
-      if (this.real[mid] < before) lo = mid + 1
+      if (this.#real[mid] < before) lo = mid + 1
       else hi = mid
     }
-    return lo > 0 ? this.real[lo - 1] : undefined
+    return lo > 0 ? this.#real[lo - 1] : undefined
   }
 
   /** token 结束行（多行 token：起始行 + 文本中的换行数） */
   endLine(idx: number): number {
-    const t = this.tokens[idx]
+    const t = this.#tokens[idx]
     let n = 0
     for (let i = 0; i < t.text.length; i++) if (t.text.charCodeAt(i) === 10) n++
     return t.line + n
@@ -81,12 +87,12 @@ export class Metrics {
 
   /** 相邻两个实 token 之间作者是否断过行（注释蕴含换行，天然覆盖） */
   brokeBetween(aIdx: number, bIdx: number): boolean {
-    return this.tokens[bIdx].line > this.tokens[aIdx].line
+    return this.#tokens[bIdx].line > this.#tokens[aIdx].line
   }
 
-  private fmtTok(idx: number): FmtToken {
-    const t = this.tokens[idx]
-    return { ...t, unary: this.unaryAt.has(idx) }
+  #fmtTok(idx: number): FmtToken {
+    const t = this.#tokens[idx]
+    return { ...t, unary: this.#unaryAt.has(idx) }
   }
 
   // ---- 平铺宽度 ----------------------------------------------------------
@@ -99,13 +105,13 @@ export class Metrics {
     let width = 0
     let prev: FmtToken | undefined
     const stack: string[] = []
-    for (let r = 0; r < this.real.length; r++) {
-      const idx = this.real[r]
+    for (let r = 0; r < this.#real.length; r++) {
+      const idx = this.#real[r]
       if (idx < from) continue
       if (idx >= to) break
-      const t = this.tokens[idx]
+      const t = this.#tokens[idx]
       if (t.type === 'comment') continue
-      const ft = this.fmtTok(idx)
+      const ft = this.#fmtTok(idx)
       const enclosing = stack.length > 0 ? stack[stack.length - 1] : ''
       if (prev !== undefined) {
         if (gapBetween(prev, ft, enclosing) === 'space') width++
@@ -122,7 +128,44 @@ export class Metrics {
   }
 
   get width(): number {
-    return this.printWidth
+    return this.#printWidth
+  }
+
+  /**
+   * [from, to) 区间实 token 到第一处源码断点为止的平铺宽度；区间内
+   * 无换行时＝flatWidth。「行内放得下吗」的贪心口径（首行贪心）：
+   * 结构性多行的操作数只量作者写在首行的部分 —— 运算符行内放得下就
+   * 保持行内，让多行结构自己展开（jqjq 语料 `|= map(` 的形态），
+   * 不因整段平铺放不下而强制下沉。
+   */
+  firstLineWidth(from: number, to: number): number {
+    const key = `${from}:${to}`
+    const memo = this.#firstLineMemo.get(key)
+    if (memo !== undefined) return memo
+    let width = 0
+    let prev: FmtToken | undefined
+    const stack: string[] = []
+    for (let r = 0; r < this.#real.length; r++) {
+      const idx = this.#real[r]
+      if (idx < from) continue
+      if (idx >= to) break
+      const t = this.#tokens[idx]
+      if (t.type === 'comment') continue
+      if (prev !== undefined && t.line > prev.line) break // 作者断点：首行到此为止
+      const ft = this.#fmtTok(idx)
+      const enclosing = stack.length > 0 ? stack[stack.length - 1] : ''
+      if (prev !== undefined) {
+        if (gapBetween(prev, ft, enclosing) === 'space') width++
+      }
+      width += t.text.length
+      if (t.type === 'operator') {
+        if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(t.text)
+        else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop()
+      }
+      prev = ft
+    }
+    this.#firstLineMemo.set(key, width)
+    return width
   }
 
   // ---- 括号组：位置无关的展开条件（R2 ①②④） ----------------------------
@@ -167,7 +210,7 @@ export class Metrics {
   /** 组内（开括号、闭括号之间）是否有不属于任何子节点 span 的注释 */
   #hasOwnComment(openIdx: number, closerIdx: number, children: Node[]): boolean {
     for (let i = openIdx + 1; i < closerIdx; i++) {
-      if (this.tokens[i]!.type !== 'comment') continue
+      if (this.#tokens[i]!.type !== 'comment') continue
       let inside = false
       for (const c of children) {
         if (i >= c.start && i < c.end) {
@@ -183,9 +226,17 @@ export class Metrics {
   /** 组的闭括号前（最后一个子节点之后）是否有注释 */
   hasCommentBefore(closerIdx: number, lastChildEnd: number): boolean {
     for (let i = lastChildEnd; i < closerIdx; i++) {
-      if (this.tokens[i]!.type === 'comment') return true
+      if (this.#tokens[i]!.type === 'comment') return true
     }
     return false
+  }
+
+  /** [from, to) 内首个注释 token 的下标（无则 undefined） */
+  firstCommentBetween(from: number, to: number): number | undefined {
+    for (let i = from; i < to; i++) {
+      if (this.#tokens[i]!.type === 'comment') return i
+    }
+    return undefined
   }
 
   // ---- 结构性多行 --------------------------------------------------------

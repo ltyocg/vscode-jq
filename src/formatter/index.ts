@@ -4,8 +4,10 @@
  * 管线：解析（src/formatter/parser/，文法事实来源 jqlang/jq 的
  * parser.y）→ AST → 打印（printer.ts，按 STYLE.md 的规范）。
  *
- * 只处理空白的、结构感知的排版器：从不改动 token 文本，从不增删
- * token（例如不会补尾逗号）。风格规范见 STYLE.md；要点：
+ * 只处理空白的、结构感知的排版器：从不改动 token 文本；唯一允许增删
+ * token 的位置是对象构造的尾随逗号，由 trailingComma 选项控制（默认
+ * 'never'＝一律去掉，jq 语法中对象构造是尾随逗号唯一合法的位置）。
+ * 风格规范见 STYLE.md；要点：
  *  - 链（管道与双目运算符，含 and/or）断行时行首运算符，续行取
  *    indentSize 整数倍的缩进，不做锚点列对齐；
  *  - 括号组「展开或单行」二选一：作者展开意图保留、自身层级有注释、
@@ -32,7 +34,7 @@ import { LexError } from '../tokenizer'
 import { FormatError, defaultFormatOptions, type FormatOptions } from './api'
 
 export { FormatError, defaultFormatOptions } from './api'
-export type { FormatOptions } from './api'
+export type { FormatOptions, TrailingCommaMode } from './api'
 
 export function formatJq(src: string, options?: Partial<FormatOptions>): string {
   if (src.trim() === '') return src

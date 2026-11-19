@@ -83,6 +83,21 @@
           "maximum": 8,
           "description": "Number of spaces per indentation level."
         },
+        "jq.format.trailingComma": {
+          "type": "string",
+          "enum": [
+            "never",
+            "multiline",
+            "preserve"
+          ],
+          "default": "never",
+          "enumDescriptions": [
+            "Never emit a trailing comma; remove any trailing comma found in object constructors.",
+            "Add a trailing comma after the last entry of expanded (multiline) object constructors; remove it in single-line ones.",
+            "Keep trailing commas exactly as written in the source."
+          ],
+          "description": "Trailing comma policy for object constructors (the only place where a trailing comma is legal in jq)."
+        },
         "jq.lsp.enabled": {
           "type": "boolean",
           "default": true,

@@ -214,8 +214,10 @@ test('groups on a pipe-continuation line indent from that line', () => {
 test('sole object/array argument is hugged', () => {
   assert.equal(fmt('map({\n  b: 1\n})'), 'map({\n  b: 1\n})\n')
   assert.equal(fmt('map([\n  1,\n  2\n])'), 'map([\n  1,\n  2\n])\n')
-  // 两个实参不拥抱：悬挂的实参组按作者形态保留（`; [` 不断行）
-  assert.equal(fmt('f([\n  1\n]; [\n  2\n])'), 'f( [\n  1\n]; [\n  2\n] )\n')
+  // 两个实参不拥抱：悬挂的实参组按作者形态保留（`; [` 不断行）。
+  // 实参组的基础缩进＝实参的 home（悬挂首元素＝元素列 3）：元素在
+  // 3＋1 层，闭括号回 3（与 `( eval_ast(` 的作者锚定同形）
+  assert.equal(fmt('f([\n  1\n]; [\n  2\n])'), 'f( [\n     1\n   ]; [\n     2\n   ] )\n')
 })
 
 // ---- R3 对象条目 ---------------------------------------------------------
@@ -223,16 +225,17 @@ test('sole object/array argument is hugged', () => {
 test('object construction', () => {
   assert.equal(fmt('{a: 1, "b": 2, $c}'), '{a: 1, "b": 2, $c}\n')
   assert.equal(fmt('{if: 1, end: 2}'), '{if: 1, end: 2}\n')
-  // 尾逗号原样保留（绝不增删 token）
-  assert.equal(fmt('{a: 1,}'), '{a: 1,}\n')
+  // 尾逗号默认去掉（trailingComma 选项，见下方专项测试）
+  assert.equal(fmt('{a: 1,}'), '{a: 1}\n')
 })
 
 test('object values stay on the key line; continuation indents one level', () => {
   // 冒号后源码未换行：值留在键行
   assert.equal(fmt('{a: 1, b: 2}'), '{a: 1, b: 2}\n')
-  // 冒号后的源码换行：保留，值另起一行（条目缩进 +1 层）；对象保持
-  // 作者的悬挂形态，闭括号按作者贴行
-  assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n  value\n}\n')
+  // 冒号后的源码换行：保留，值另起一行（条目 home＋1 层 —— 悬挂条目
+  // 的 home 是元素列 2，故值在 4；jqjq 语料 39 处冒号断行全部如此）；
+  // 对象保持作者的悬挂形态，闭括号按作者贴行
+  assert.equal(fmt('{ key:\n  value\n}'), '{ key:\n    value\n}\n')
   // 值内部断行：续行取条目缩进 +1 层
   assert.equal(
     fmt('{ key: .aaaaaaaaaaaaaaaa +\n  .bbbbbbbbbbbbbbbbbbbb }'),
@@ -448,6 +451,65 @@ test('blank lines: preserved verbatim, never added, capped at two', () => {
   assert.equal(fmt('.a # c\n\n| .b'), '.a # c\n\n| .b\n')
   // 源码没有空行：行宽断行也不凭空增加
   assert.equal(fmt('.aaaaaaaa | .bbbbbbbb', 10), '.aaaaaaaa\n| .bbbbbbbb\n')
+})
+
+// ---- 尾随逗号（trailingComma 选项，仅对象构造）---------------------------
+
+test('trailing comma never (default): stripped in single-line and expanded forms', () => {
+  assert.equal(fmt('{a: 1,}'), '{a: 1}\n')
+  assert.equal(fmt('{\n  a: 1,\n  b: 2,\n}'), '{\n  a: 1,\n  b: 2\n}\n')
+  // 末条目与闭括号之间的注释原位保留
+  assert.equal(fmt('{a: 1, # note\n}'), '{ a: 1 # note\n}\n')
+  // 独占一行的尾随逗号被去掉后不得凭空新增空行（其源码行仍计入保持）
+  assert.equal(fmt('{\n  a: 1\n,\n}'), '{\n  a: 1\n}\n')
+  assert.equal(fmt('{\n  a: 1\n,\n\n}'), '{\n  a: 1\n\n}\n')
+})
+
+test('trailing comma multiline: added in expanded objects, removed in single-line ones', () => {
+  const m = (src: string, printWidth = 100) =>
+    formatJq(src, { printWidth, trailingComma: 'multiline' })
+  assert.equal(m('{a: 1,}'), '{a: 1}\n') // 单行去掉
+  assert.equal(m('{a: 1, b: 2}'), '{a: 1, b: 2}\n') // 单行不补
+  assert.equal(m('{\n  a: 1,\n  b: 2\n}'), '{\n  a: 1,\n  b: 2,\n}\n') // 展开补齐
+  assert.equal(m('{aaa: 1, bbb: 2}', 10), '{\n  aaa: 1,\n  bbb: 2,\n}\n') // 超宽被迫展开
+  assert.equal(m('map({\n  a: 1\n})'), 'map({\n  a: 1,\n})\n') // 拥抱实参内的对象
+  assert.equal(m('{ a: 1,\n  b: 2 }'), '{ a: 1,\n  b: 2, }\n') // 悬挂形态
+  assert.equal(m('{ x: {\n  a: 1\n}}'), '{ x: {\n    a: 1,\n  }, }\n') // 嵌套各自独立
+  // 补齐的逗号紧贴末条目、位于闭括号前注释之前
+  assert.equal(m('{\n  a: 1 # note\n}'), '{\n  a: 1, # note\n}\n')
+})
+
+test('trailing comma preserve: source kept verbatim in both forms', () => {
+  const p = (src: string) => formatJq(src, { trailingComma: 'preserve' })
+  assert.equal(p('{a: 1,}'), '{a: 1,}\n')
+  assert.equal(p('{a: 1}'), '{a: 1}\n')
+  assert.equal(p('{\n  a: 1,\n  b: 2,\n}'), '{\n  a: 1,\n  b: 2,\n}\n')
+  assert.equal(p('{\n  a: 1,\n  b: 2\n}'), '{\n  a: 1,\n  b: 2\n}\n')
+})
+
+test('trailing comma modes are idempotent', () => {
+  for (const mode of ['never', 'multiline', 'preserve'] as const) {
+    for (const src of [
+      '{a: 1,}',
+      '{\n  a: 1,\n  b: 2,\n}',
+      '{\n  a: 1,\n  b: 2\n}',
+      'map({\n  a: 1\n})'
+    ]) {
+      const once = formatJq(src, { trailingComma: mode })
+      assert.equal(
+        formatJq(once, { trailingComma: mode }),
+        once,
+        `not idempotent (${mode}): ${src}`
+      )
+    }
+  }
+})
+
+test('trailing commas stay illegal outside object constructors', () => {
+  // 数组 / 函数实参 / 解构模式中的尾随逗号是 jq 语法错误，与选项无关
+  assert.throws(() => fmt('[1, 2,]'), FormatError)
+  assert.throws(() => fmt('f(1; 2;)'), FormatError)
+  assert.throws(() => fmt('. as {$a,} | .'), FormatError)
 })
 
 // ---- R13 封套与错误 ------------------------------------------------------
