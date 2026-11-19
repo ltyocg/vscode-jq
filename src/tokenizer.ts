@@ -26,10 +26,23 @@ export type TokenType =
 export interface Token {
   type: TokenType
   text: string
+  /** 首字符在文档中的 UTF-16 偏移 */
+  offset: number
   /** 首字符所在行（0 起） */
   line: number
   /** 首字符所在列（0 起） */
   col: number
+}
+
+/** jq 词法中的 FIELD：点号与名称必须相邻（包括关键字名与常量名）。 */
+export function isDotFieldName(dot: Token | undefined, name: Token | undefined): boolean {
+  return (
+    dot?.type === 'operator' &&
+    dot.text === '.' &&
+    name !== undefined &&
+    (name.type === 'ident' || name.type === 'keyword' || name.type === 'constant') &&
+    dot.offset + 1 === name.offset
+  )
 }
 
 const KEYWORDS = new Set([
@@ -204,7 +217,13 @@ function scanNumber(s: string, i: number): number {
 }
 
 export function tokenize(src: string): Token[] {
+  return tokenizeSource(src).tokens
+}
+
+/** 以首个 token 外的换行决定结构换行符，字符串和注释续行中的换行不参与。 */
+export function tokenizeSource(src: string): { tokens: Token[]; eol: '\r\n' | '\n' } {
   const tokens: Token[] = []
+  let eol: '\r\n' | '\n' | undefined
   let i = 0
   let line = 0
   let lineStart = 0
@@ -213,12 +232,13 @@ export function tokenize(src: string): Token[] {
   // 调用时若已把 i 推进到 token 末尾（多字符 token 的扫描循环），
   // 必须显式传入 begin，否则会把结束位置记成起始列。
   const push = (type: TokenType, text: string, begin = i) => {
-    tokens.push({ type, text, line, col: begin - lineStart })
+    tokens.push({ type, text, offset: begin, line, col: begin - lineStart })
   }
 
   while (i < src.length) {
     const c = src[i]
     if (c === '\n') {
+      eol ??= src[i - 1] === '\r' ? '\r\n' : '\n'
       i++
       line++
       lineStart = i
@@ -231,7 +251,9 @@ export function tokenize(src: string): Token[] {
     if (c === '#') {
       const begin = i
       const end = scanComment(src, begin)
-      const text = src.slice(begin, end)
+      // 末尾的 CRLF 属于结构换行；token 内部的续行字节仍原样保留。
+      const bodyEnd = src[end] === '\n' && src[end - 1] === '\r' ? end - 1 : end
+      const text = src.slice(begin, bodyEnd)
       push('comment', text, begin)
       i = end
       // 该 token 可能跨行（反斜杠续行）；同步行号，让后续 token
@@ -299,5 +321,5 @@ export function tokenize(src: string): Token[] {
     }
     throw new LexError(`unexpected character ${JSON.stringify(c)} at line ${line + 1}`)
   }
-  return tokens
+  return { tokens, eol: eol ?? '\n' }
 }

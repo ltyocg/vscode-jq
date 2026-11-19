@@ -4,7 +4,7 @@
  * emit.ts）。打印器的发射路径与宽度测量（width.ts 的 flatWidth）
  * 消费同一份规则，两侧才不会漂移。
  */
-import type { Token } from '../tokenizer'
+import { isDotFieldName, type Token } from '../tokenizer'
 
 /** 开括号 */
 const OPENERS = new Set(['(', '[', '{'])
@@ -61,7 +61,7 @@ export function gapBetween(prev: FmtToken, next: FmtToken, enclosing: string): '
   }
   // 2. 开括号之后直接紧跟
   if (prev.type === 'operator' && OPENERS.has(prev.text)) return 'none'
-  // 3. 点号之后：'.foo'、'."foo"'、'.['；关键字字段名（'.catch'、'.end'、
+  // 3. 点号之后：'.foo'、'."foo"'、'.['；关键字/常量字段名（'.catch'、'.end'、'.null'、
   //    '$if_.elif'）按源码邻接保留 —— '.catch' 与 '. catch'、'.end' 与
   //    '. end' 语义不同（字段访问 vs 身份后跟子句关键字），归一化任一
   //    方向都会改写程序
@@ -73,13 +73,7 @@ export function gapBetween(prev: FmtToken, next: FmtToken, enclosing: string): '
     ) {
       return 'none'
     }
-    if (
-      next.type === 'keyword' &&
-      prev.line === next.line &&
-      prev.col + prev.text.length === next.col
-    ) {
-      return 'none'
-    }
+    if (isDotFieldName(prev, next)) return 'none'
     return 'space'
   }
   // 4. 一元负号紧贴操作数：'-1'、'-(.a)'、'-.score'

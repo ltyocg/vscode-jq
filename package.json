@@ -22,16 +22,24 @@
     "url": "https://github.com/gigaplant/vscode-jq"
   },
   "publisher": "gigaplant",
+  "files": [
+    "dist/extension.js",
+    "language-configuration.json",
+    "syntaxes/jq.tmLanguage.json",
+    "README.md",
+    "LICENSE"
+  ],
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "tsc -p ./ && node esbuild.mts --production",
+    "compile": "tsc -p ./ && tsc -p tsconfig.node.json && node esbuild.mts --production",
     "watch": "node esbuild.mts --watch",
-    "typecheck": "tsc -p ./ --noEmit",
+    "typecheck": "tsc -p ./ --noEmit && tsc -p tsconfig.node.json",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "tsc -p ./ && node --test \"out/**/*.test.js\"",
-    "package": "node -e \"fs.mkdirSync('build', {recursive: true})\" && vsce package --no-dependencies --out build/"
+    "package": "node scripts/package.mts",
+    "test:extension": "pnpm run compile && node scripts/test-extension.mts"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
@@ -39,8 +47,10 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/vscode": "^1.146.0",
+    "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.28.2",
+    "jszip": "3.10.2",
     "oxfmt": "^0.78.0",
     "typescript": "^7.0.2",
     "vscode-oniguruma": "^2.0.1",
@@ -101,14 +111,16 @@
           "type": "integer",
           "default": 100,
           "minimum": 20,
-          "description": "Maximum line width before the formatter breaks pipelines and lists."
+          "description": "Maximum line width before the formatter breaks pipelines and lists.",
+          "scope": "resource"
         },
         "jq.format.indentSize": {
           "type": "integer",
           "default": 2,
           "minimum": 1,
           "maximum": 8,
-          "description": "Number of spaces per indentation level. Also kept in sync with the editor's tab size for jq files."
+          "description": "Indentation level in spaces for the formatter and smart Enter. Does not change the editor tab size.",
+          "scope": "resource"
         },
         "jq.format.trailingComma": {
           "type": "string",
@@ -123,7 +135,8 @@
             "Add a trailing comma after the last entry of expanded (multiline) object constructors; remove it in single-line ones.",
             "Keep trailing commas exactly as written in the source."
           ],
-          "description": "Trailing comma policy for object constructors (the only place where a trailing comma is legal in jq)."
+          "description": "Trailing comma policy for object constructors (the only place where a trailing comma is legal in jq).",
+          "scope": "resource"
         },
         "jq.lsp.enabled": {
           "type": "boolean",

@@ -74,6 +74,7 @@ test('keyword field names after a dot keep source adjacency', () => {
   // 字（语法错误）；反方向同样危险：'else . end' 收紧成 '.end' 会变成
   // 字段访问。点号与关键字之间的间距只能按源码邻接保留，不可归一化
   assert.equal(fmt('.catch = $c'), '.catch = $c\n')
+  assert.equal(fmt('.true|.false.null'), '.true | .false.null\n')
   assert.equal(
     fmt('if $end_ then .end = $end_ else . end'),
     'if $end_ then .end = $end_ else . end\n'
@@ -457,6 +458,10 @@ test('blank lines: preserved verbatim, never added, capped at two', () => {
 
 test('trailing comma never (default): stripped in single-line and expanded forms', () => {
   assert.equal(fmt('{a: 1,}'), '{a: 1}\n')
+  assert.equal(fmt('[{a: 1,}]'), '[{a: 1}]\n')
+  assert.equal(fmt('f({a: {b: 1,},})'), 'f({a: {b: 1}})\n')
+  // 被移除的内层逗号也不参与外层组的行宽判定
+  assert.equal(fmt('[{a: 1,}]', 8), '[{a: 1}]\n')
   assert.equal(fmt('{\n  a: 1,\n  b: 2,\n}'), '{\n  a: 1,\n  b: 2\n}\n')
   // 末条目与闭括号之间的注释原位保留
   assert.equal(fmt('{a: 1, # note\n}'), '{ a: 1 # note\n}\n')
@@ -469,6 +474,8 @@ test('trailing comma multiline: added in expanded objects, removed in single-lin
   const m = (src: string, printWidth = 100) =>
     formatJq(src, { printWidth, trailingComma: 'multiline' })
   assert.equal(m('{a: 1,}'), '{a: 1}\n') // 单行去掉
+  assert.equal(m('[{a: 1,}]', 8), '[{a: 1}]\n')
+  assert.equal(m('{a: 1,}\n', 6), '{a: 1}\n')
   assert.equal(m('{a: 1, b: 2}'), '{a: 1, b: 2}\n') // 单行不补
   assert.equal(m('{\n  a: 1,\n  b: 2\n}'), '{\n  a: 1,\n  b: 2,\n}\n') // 展开补齐
   assert.equal(m('{aaa: 1, bbb: 2}', 10), '{\n  aaa: 1,\n  bbb: 2,\n}\n') // 超宽被迫展开
@@ -482,6 +489,7 @@ test('trailing comma multiline: added in expanded objects, removed in single-lin
 test('trailing comma preserve: source kept verbatim in both forms', () => {
   const p = (src: string) => formatJq(src, { trailingComma: 'preserve' })
   assert.equal(p('{a: 1,}'), '{a: 1,}\n')
+  assert.equal(p('[{a: 1,}]'), '[{a: 1,}]\n')
   assert.equal(p('{a: 1}'), '{a: 1}\n')
   assert.equal(p('{\n  a: 1,\n  b: 2,\n}'), '{\n  a: 1,\n  b: 2,\n}\n')
   assert.equal(p('{\n  a: 1,\n  b: 2\n}'), '{\n  a: 1,\n  b: 2\n}\n')
@@ -493,7 +501,15 @@ test('trailing comma modes are idempotent', () => {
       '{a: 1,}',
       '{\n  a: 1,\n  b: 2,\n}',
       '{\n  a: 1,\n  b: 2\n}',
-      'map({\n  a: 1\n})'
+      'map({\n  a: 1\n})',
+      '{a: 1 # c\n}',
+      '{a: 1,  # c\n}',
+      '{a: 1 # c\n,}',
+      '{a: 1\n# before comma\n,\n# after comma\n}',
+      '{\n  a: 1\n# before comma\n, # after comma\n}',
+      '{a: (\n .\n)}',
+      '{a: (\n .\n), }',
+      '[{a: 1,}, {b: (\n .)}]'
     ]) {
       const once = formatJq(src, { trailingComma: mode })
       assert.equal(
@@ -577,8 +593,22 @@ test('broken input is left alone', () => {
   assert.throws(() => fmt('if .a then 1'), FormatError) // 缺 end
 })
 
-test('CRLF is preserved', () => {
-  assert.equal(fmt('.a | .b\r\n'), '.a | .b\r\n')
+test('CRLF is preserved in multiline output and EOF comments', () => {
+  const src = 'def f: 1;\r\nf|.\r\n# tail\r\n'
+  const expected = 'def f: 1;\r\nf | .\r\n# tail\r\n'
+  assert.equal(fmt(src), expected)
+  assert.equal(fmt(expected), expected)
+})
+
+test('structural EOL does not rewrite newlines inside opaque tokens', () => {
+  const string = '"a\nb\r\nc"'
+  const comment = '# comment \\\r\n  continuation'
+  const src = `def f: ${string};\r\n${comment}\r\nf|. # end\r\n`
+  const expected = `def f: ${string};\r\n${comment}\r\nf | . # end\r\n`
+  assert.equal(fmt(src), expected)
+  assert.equal(fmt(expected), expected)
+  // 字符串内部的 CRLF 不应把外层 LF 改为 CRLF。
+  assert.equal(fmt(`def f: ${string};\nf|.`), `def f: ${string};\nf | .\n`)
 })
 
 test('empty input', () => {

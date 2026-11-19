@@ -6,9 +6,8 @@
  * 有意改变格式化行为时使用，并须与行为变更同一个提交）。重构期间
  * golden 出现 diff 即回归，绝不能靠重新生成"修绿"。
  *
- * 工作区检出可能是 CRLF（git index 存 LF、core.autocrlf 平台相关），
- * 两侧统一归一到 LF 再比较，golden 才是跨平台确定的；原始字节的
- * CRLF 保真路径由 index.test.ts 的「CRLF is preserved」覆盖。
+ * golden 以 LF 跨平台比较；额外构造 CRLF 语料，不依赖检出环境。
+ * CRLF 与原始 token 字节混用由 index.test.ts 的独立用例覆盖。
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -37,12 +36,22 @@ test('jqjq corpus: formatting is idempotent', () => {
   const src = norm(readFileSync(corpusPath, 'utf8'))
   const once = formatJq(src)
   assert.equal(formatJq(once), once)
-  // 原始字节（本机为 CRLF）—— 覆盖 eol 检测路径
-  const raw = readFileSync(corpusPath, 'utf8')
-  const onceRaw = formatJq(raw)
-  assert.equal(formatJq(onceRaw), onceRaw)
+  const crlf = (text: string): string => text.replace(/\n/g, '\r\n')
+  const onceCrlf = formatJq(crlf(src))
+  assert.equal(onceCrlf, crlf(once))
+  assert.equal(formatJq(onceCrlf), onceCrlf)
 })
 
-// 60/80/120 的幂等探针在规划阶段已人工验证通过；默认宽度（100）由
-// 上面的测试覆盖。窄宽度下悬挂式判定的宽度测量路径有已知风格瑕疵，
-// 不在本测试的锁定范围内。
+test('jqjq corpus: formatting is idempotent across formatter options', () => {
+  const src = norm(readFileSync(corpusPath, 'utf8'))
+  for (const printWidth of [20, 60, 80, 100, 120]) {
+    for (const indentSize of [1, 2, 4, 8]) {
+      for (const trailingComma of ['never', 'multiline', 'preserve'] as const) {
+        const options = { printWidth, indentSize, trailingComma }
+        const once = formatJq(src, options)
+        // 比较布尔值，失败时避免把整个三千行语料打印到日志。
+        assert.ok(formatJq(once, options) === once, JSON.stringify(options))
+      }
+    }
+  }
+})

@@ -52,7 +52,5 @@ export function formatJq(src: string, options?: Partial<FormatOptions>): string 
   }
   if (parsed.real.length === 0) return src
 
-  const eol = src.includes('\r\n') ? '\r\n' : '\n'
-  const out = printProgramResult(parsed, opts)
-  return out + eol
+  return printProgramResult(parsed, opts)
 }

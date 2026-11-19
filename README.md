@@ -47,7 +47,7 @@ go install github.com/wader/jq-lsp@latest   # 从源码（装到 ~/go/bin）
 
 ### 格式化
 
-通过 `Format Document`（`⇧⌥F`）使用，纯空白重排，不改变任何 token 内容；无法解析（括号不配对、字符串未闭合等）的文件保持原样。
+通过 `Format Document`（`⇧⌥F`）使用。格式化保留字符串等 token 的内容，除了空白之外只会按配置增删对象构造的尾随逗号；无法解析（括号不配对、字符串未闭合等）的文件保持原样。
 
 风格规则：
 
@@ -68,24 +68,39 @@ go install github.com/wader/jq-lsp@latest   # 从源码（装到 ~/go/bin）
 
 #### 设置
 
-| 设置                   | 默认值 | 说明               |
-| ---------------------- | ------ | ------------------ |
-| `jq.format.printWidth` | `100`  | 触发断行的最大行宽 |
-| `jq.format.indentSize` | `2`    | 每级缩进空格数     |
+| 设置                      | 默认值  | 说明                                                                                      |
+| ------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| `jq.format.printWidth`    | `100`   | 触发断行的最大行宽                                                                        |
+| `jq.format.indentSize`    | `2`     | 格式化和智能回车每级缩进的空格列数，不会改写编辑器的 Tab 设置                             |
+| `jq.format.trailingComma` | `never` | 对象构造尾随逗号：`never` 去掉；`multiline` 只在展开的非空对象中补齐；`preserve` 保留有无 |
+
+这些设置按当前 jq 文件所属的工作区文件夹读取。格式化保留 LF/CRLF；如果源码混用结构换行，以首个结构换行为准，字符串和注释续行中的换行不参与判断。
 
 > 目前仅支持整文档格式化（Format Document），暂不支持 Format Selection。
 
+### 智能回车
+
+在 jq 文件中按 Enter 时，遇到对象值、子句体、括号内容或运算符的右侧内容，会在当前构造的实际基准列上加一个 `jq.format.indentSize`。同级条目保持对齐，连续输入同一条链不会逐级右移。空括号对仍会展开，光标留在中间。视觉列按编辑器的实际 Tab 宽度计算，插入 Tab 还是空格由 `editor.insertSpaces` 决定。
+
+多光标、非空选区、无法判断缩进、或光标所在行末之前超过 64 Ki 个 UTF-16 码元时，交回 VS Code 默认回车。可通过 jq 的 `editor.autoIndent` 设为 `none` 或 `keep` 停用智能缩进。
+
 ## 开发
 
+使用 Node.js 和 pnpm。CI 使用 Node.js 26 和 pnpm 12，可作为本地开发的参考：
+
 ```bash
-pnpm install
-pnpm compile   # 类型检查（tsc）+ 打包（esbuild → dist/）
-pnpm test      # 编译并运行单元测试
+pnpm install --frozen-lockfile
+pnpm typecheck       # 检查扩展与构建脚本的类型
+pnpm format:check    # 检查仓库代码风格
+pnpm test            # 单元测试、golden 与格式化选项矩阵
+pnpm compile         # 类型检查 + esbuild 打包到 dist/
+pnpm run test:extension  # 在隔离的 VS Code 宿主中测试多根工作区、回车及设置
+pnpm run package     # 生成 build/*.vsix 并校验实际归档内容
 ```
 
-调试：在 VS Code 中打开本工程，按 `F5` 启动扩展开发宿主（Extension Development Host），打开任意 `.jq` 文件验证。
+扩展宿主测试默认下载 `engines.vscode` 声明的最低版本；设 `VSCODE_EXECUTABLE_PATH` 可复用本机 VS Code 可执行文件。Linux 无显示环境可用 `xvfb-run -a pnpm run test:extension`。Windows 和 Linux CI 都运行单元测试、宿主测试及 VSIX 归档检查。
 
-打包发布：`pnpm add -g @vscode/vsce && vsce package`（运行时依赖已由 esbuild 打进 `dist/`，无需随包分发 node_modules）。
+手动调试：在 VS Code 中打开本工程，按 `F5` 启动扩展开发宿主，打开任意 `.jq` 文件验证。
 
 ## License
 

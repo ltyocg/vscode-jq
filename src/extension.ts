@@ -1,6 +1,12 @@
 import * as vscode from 'vscode'
-import { formatJq, FormatError, FormatOptions, TrailingCommaMode } from './formatter'
-import { enterEdit } from './enter'
+import {
+  defaultFormatOptions,
+  formatJq,
+  FormatError,
+  type FormatOptions,
+  type TrailingCommaMode
+} from './formatter'
+import { enterEdit, maxEnterPrefixLength } from './enter'
 import { startJqLsp } from './lsp'
 import type { LanguageClient } from 'vscode-languageclient/node'
 
@@ -10,12 +16,12 @@ let lspClient: LanguageClient | undefined
 
 export function activate(context: vscode.ExtensionContext): void {
   // -- formatter (built-in, independent of the language server) -------------
-  const formatOptions = (): FormatOptions => {
-    const cfg = vscode.workspace.getConfiguration('jq.format')
+  const formatOptions = (document: vscode.TextDocument): FormatOptions => {
+    const cfg = vscode.workspace.getConfiguration('jq.format', document)
     return {
-      printWidth: cfg.get<number>('printWidth', 100),
-      indentSize: cfg.get<number>('indentSize', 2),
-      trailingComma: cfg.get<TrailingCommaMode>('trailingComma', 'never')
+      printWidth: cfg.get<number>('printWidth', defaultFormatOptions.printWidth),
+      indentSize: cfg.get<number>('indentSize', defaultFormatOptions.indentSize),
+      trailingComma: cfg.get<TrailingCommaMode>('trailingComma', defaultFormatOptions.trailingComma)
     }
   }
 
@@ -24,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const text = document.getText()
       let formatted: string
       try {
-        formatted = formatJq(text, formatOptions())
+        formatted = formatJq(text, formatOptions(document))
       } catch (e) {
         if (e instanceof FormatError) {
           // Don't touch files we cannot parse — but say so visibly.
@@ -45,28 +51,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  // -- editor tab size follows jq.format.indentSize ------------------------
-  // configurationDefaults is static, so the [jq] override for editor.tabSize
-  // is kept in sync at runtime: jq.format.indentSize is authoritative.
-  const syncTabSize = (): void => {
-    const formatCfg = vscode.workspace.getConfiguration('jq.format')
-    const size = formatCfg.get<number>('indentSize', 2)
-    const editorCfg = vscode.workspace.getConfiguration('editor', { languageId: 'jq' })
-    if (editorCfg.get<number>('tabSize') === size) return
-    // Write to the same target where indentSize was explicitly configured;
-    // user settings when it only has the default.
-    const source = formatCfg.inspect('indentSize')
-    const target =
-      source?.workspaceValue !== undefined || source?.workspaceFolderValue !== undefined
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global
-    void editorCfg
-      .update('tabSize', size, target, true)
-      .then(undefined, (err: unknown) => LOG.error(`sync editor.tabSize: ${String(err)}`))
-  }
-
-  syncTabSize()
-
   // -- language server (diagnostics, completion, hover, definitions) --------
   const lsp = startJqLsp(LOG)
   lspClient = lsp.client
@@ -81,8 +65,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // -- smart Enter (formatter-aligned indentation) --------------------------
   // VS Code 没有按语法算回车缩进的钩子（indentationRules 只有正则、只能
-  // ±1 级）。这里拦截 jq 文件的回车：以格式化器为 oracle 计算新行缩进
-  //（src/enter.ts），算不出时回退默认回车，语言配置里的正则缩进规则
+  // ±1 级）。这里拦截 jq 文件的回车，按当前构造的基准列计算缩进；
+  //（src/enter.ts）算不出时回退默认回车，语言配置里的正则缩进规则
   // 照常兜底。
   // 回退走 `default:type` 携 "\n"：核心 type 管线的第一个拦截就是
   // EnterOperation（getEnterAction／getIndentForEnter），等价于原生
@@ -100,11 +84,14 @@ export function activate(context: vscode.ExtensionContext): void {
       .get<string>('autoIndent')
     if (auto === 'none' || auto === 'keep') return fallbackEnter()
     const doc = editor.document
+    const cursor = editor.selection.active
+    const lineEnd = doc.lineAt(cursor.line).range.end
+    if (doc.offsetAt(lineEnd) > maxEnterPrefixLength) return fallbackEnter()
     const { insertSpaces, tabSize } = editor.options
     const edit = enterEdit(
-      doc.getText(),
-      doc.offsetAt(editor.selection.active),
-      formatOptions(),
+      doc.getText(new vscode.Range(new vscode.Position(0, 0), lineEnd)),
+      doc.offsetAt(cursor),
+      formatOptions(doc),
       insertSpaces !== false,
       typeof tabSize === 'number' ? Math.max(1, tabSize) : 2
     )
@@ -123,9 +110,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     LOG,
     vscode.languages.registerDocumentFormattingEditProvider('jq', provider),
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('jq.format.indentSize')) syncTabSize()
-    }),
     vscode.commands.registerCommand('jq.enter', smartEnter)
   )
 }

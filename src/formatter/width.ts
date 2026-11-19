@@ -42,19 +42,26 @@ export class Metrics {
   readonly #real: number[]
   readonly #unaryAt: Set<number>
   readonly #printWidth: number
+  readonly #suppressed: ReadonlySet<number> | undefined
 
-  constructor(tokens: Token[], real: number[], unaryAt: Set<number>, printWidth: number) {
+  constructor(
+    tokens: Token[],
+    real: number[],
+    unaryAt: Set<number>,
+    printWidth: number,
+    suppressed: ReadonlySet<number> | undefined
+  ) {
     this.#tokens = tokens
     this.#real = real
     this.#unaryAt = unaryAt
     this.#printWidth = printWidth
+    this.#suppressed = suppressed
   }
 
   // ---- token 工具 --------------------------------------------------------
 
-  /** ≥ from 的最近实 token 原始下标 */
-  nextReal(from: number): number | undefined {
-    // 二分（real 有序）
+  /** real 中首个原始下标 ≥ from 的位置。测量直接从这里开始扫描。 */
+  #lowerBound(from: number): number {
     let lo = 0
     let hi = this.#real.length
     while (lo < hi) {
@@ -62,19 +69,17 @@ export class Metrics {
       if (this.#real[mid] < from) lo = mid + 1
       else hi = mid
     }
-    return this.#real[lo]
+    return lo
+  }
+
+  /** ≥ from 的最近实 token 原始下标 */
+  nextReal(from: number): number | undefined {
+    return this.#real[this.#lowerBound(from)]
   }
 
   /** < before 的最近实 token 原始下标 */
   prevReal(before: number): number | undefined {
-    let lo = 0
-    let hi = this.#real.length
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1
-      if (this.#real[mid] < before) lo = mid + 1
-      else hi = mid
-    }
-    return lo > 0 ? this.#real[lo - 1] : undefined
+    return this.#real[this.#lowerBound(before) - 1]
   }
 
   /** token 结束行（多行 token：起始行 + 文本中的换行数） */
@@ -99,32 +104,7 @@ export class Metrics {
 
   /** [from, to) 区间实 token 的平铺宽度（跳过注释；含区间内 gap） */
   flatWidth(from: number, to: number): number {
-    const key = `${from}:${to}`
-    const memo = this.#flatMemo.get(key)
-    if (memo !== undefined) return memo
-    let width = 0
-    let prev: FmtToken | undefined
-    const stack: string[] = []
-    for (let r = 0; r < this.#real.length; r++) {
-      const idx = this.#real[r]
-      if (idx < from) continue
-      if (idx >= to) break
-      const t = this.#tokens[idx]
-      if (t.type === 'comment') continue
-      const ft = this.#fmtTok(idx)
-      const enclosing = stack.length > 0 ? stack[stack.length - 1] : ''
-      if (prev !== undefined) {
-        if (gapBetween(prev, ft, enclosing) === 'space') width++
-      }
-      width += t.text.length
-      if (t.type === 'operator') {
-        if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(t.text)
-        else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop()
-      }
-      prev = ft
-    }
-    this.#flatMemo.set(key, width)
-    return width
+    return this.#measure(from, to, false)
   }
 
   get width(): number {
@@ -139,24 +119,27 @@ export class Metrics {
    * 不因整段平铺放不下而强制下沉。
    */
   firstLineWidth(from: number, to: number): number {
+    return this.#measure(from, to, true)
+  }
+
+  #measure(from: number, to: number, firstLine: boolean): number {
+    const memo = firstLine ? this.#firstLineMemo : this.#flatMemo
     const key = `${from}:${to}`
-    const memo = this.#firstLineMemo.get(key)
-    if (memo !== undefined) return memo
+    const cached = memo.get(key)
+    if (cached !== undefined) return cached
     let width = 0
     let prev: FmtToken | undefined
     const stack: string[] = []
-    for (let r = 0; r < this.#real.length; r++) {
+    for (let r = this.#lowerBound(from); r < this.#real.length; r++) {
       const idx = this.#real[r]
-      if (idx < from) continue
       if (idx >= to) break
+      // 宽度测量和打印器共用尾逗号抑制集合，排版判断不计不会发射的 token。
+      if (this.#suppressed?.has(idx)) continue
       const t = this.#tokens[idx]
-      if (t.type === 'comment') continue
-      if (prev !== undefined && t.line > prev.line) break // 作者断点：首行到此为止
+      if (firstLine && prev !== undefined && t.line > prev.line) break
       const ft = this.#fmtTok(idx)
       const enclosing = stack.length > 0 ? stack[stack.length - 1] : ''
-      if (prev !== undefined) {
-        if (gapBetween(prev, ft, enclosing) === 'space') width++
-      }
+      if (prev !== undefined && gapBetween(prev, ft, enclosing) === 'space') width++
       width += t.text.length
       if (t.type === 'operator') {
         if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(t.text)
@@ -164,7 +147,7 @@ export class Metrics {
       }
       prev = ft
     }
-    this.#firstLineMemo.set(key, width)
+    memo.set(key, width)
     return width
   }
 

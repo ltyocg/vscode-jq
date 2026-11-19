@@ -1,11 +1,10 @@
 /**
- * 回车智能缩进 —— 以格式化器为 oracle。
+ * 回车智能缩进：子内容从眼前的语法基准列缩进一级，同级项不多加一级。
  *
- * VS Code 没有提供「回车时按语法计算缩进」的钩子（indentationRules 与
- * onEnterRules 只有正则、只能 ±1 级），本模块换一条路：把光标前的文本
- * 构造成探针程序，交给内置格式化器排版，探针里哨兵变量所在行的缩进
- * 就是回车后新行应有的缩进 —— 与格式化器的输出规范天然一致（包括
- * 悬挂组对齐开括号列＋2、行中 if 的子句列对齐这类正则做不到的缩进）。
+ * VS Code 的正则缩进规则认不出行中的对象键或子句。这里先扫描光标前的
+ * token，保留当前构造的实际视觉列；明确在等子内容时直接用「基准列 +
+ * indentSize」。需要补全语法才能判断的场景（如语句结束、非悬挂组的
+ * 同级项）再交给格式化器探针。
  *
  * 回车时刻的前缀几乎总是不完整程序（`foo |`、`{a: 1,`），不能直接解析。
  * 策略是扫描前缀 token 维护「未闭合构造」栈（括号组／if 子句相位／
@@ -18,8 +17,10 @@
  * `then . end` 或 `end`、def 补 `;`）。任何环节失败都返回 null，调用方
  * 回退默认回车（语言配置里的正则缩进规则照常兜底）。
  */
-import { tokenize, LexError, type Token } from './tokenizer'
+import { isDotFieldName, tokenize, LexError, type Token } from './tokenizer'
 import { formatJq, FormatError, type FormatOptions } from './formatter'
+import { parseProgram, ParseError } from './formatter/parser/parse'
+import type { AsNode, ChainNode, LabelNode, Node, PipeNode, Term } from './formatter/parser/ast'
 
 /**
  * 探针哨兵：格式化器从不改动 token 文本，哨兵在输出中的位置就是
@@ -27,7 +28,10 @@ import { formatJq, FormatError, type FormatOptions } from './formatter'
  */
 const SENTINEL = '$__jq_enter__'
 
-/** 尾随时「哨兵＝右操作数／下一项」的运算符与分隔符（含 and/or 关键字） */
+/** 回车在扩展宿主同步执行，限制探针规模以免在大文件后半段卡住编辑。 */
+export const maxEnterPrefixLength = 64 * 1024
+
+/** 等待右操作数的尾随运算符（包含管道和 and/or）。 */
 const OP_TAIL = new Set([
   '|',
   '//',
@@ -50,13 +54,30 @@ const OP_TAIL = new Set([
   '*=',
   '/=',
   '%=',
-  ',',
-  '?//',
   'and',
   'or'
 ])
 
 const OPENER: Record<string, string> = { '(': ')', '[': ']', '{': '}' }
+const IF_TAIL = new Set(['if', 'then', 'elif', 'else'])
+
+function nextCol(col: number, ch: string, tabSize: number): number {
+  return ch === '\t' ? col + tabSize - (col % tabSize) : col + 1
+}
+
+/** 按 token 顺序读，每个字符最多换算一次；不改变词法层的 UTF-16 列。 */
+function visualCols(text: string, tabSize: number): (t: Token) => number {
+  if (!text.includes('\t')) return (t) => t.col
+  let offset = 0
+  let col = 0
+  return (t) => {
+    while (offset < t.offset) {
+      const ch = text[offset++]!
+      col = ch === '\n' ? 0 : nextCol(col, ch, tabSize)
+    }
+    return col
+  }
+}
 
 /** 未闭合构造（前缀扫描栈的条目） */
 type Entry =
@@ -76,14 +97,20 @@ type Entry =
        *  器的规范列（开括号列＋2，悬挂式会补内侧空格）—— 回车遵循
        *  「对齐眼前所见」，后续 format 再归一 */
       firstContentCol: number | null
+      /** 当前组内条目起始列（对象条目为键的起始列）。 */
+      itemCol: number | null
     }
   | { kind: 'if'; col: number; phase: 'cond' | 'then' | 'else' }
   /** def：是否已过 `:`（补全时未过则需先补 `: 体` 再补 `;`） */
-  | { kind: 'def'; bodyStarted: boolean }
+  | { kind: 'def'; col: number; bodyStarted: boolean }
 
 interface Tail {
   entries: Entry[]
+  baseCol: number
+  lineCol: number
+  lastCol: number
   last: Token
+  pendingPatternCol: number | null
   asDone: boolean
   labelDone: boolean
 }
@@ -115,25 +142,52 @@ function isComplete(t: Token): boolean {
  * 扫描前缀实 token，维护未闭合构造栈与 as／label 绑定状态。括号不
  * 配对、子句关键字错位等残缺状态返回 null（回退默认回车，不去猜）。
  */
-function scanTail(real: Token[]): Tail | null {
+function scanTail(real: Token[], visualCol: (t: Token) => number): Tail | null {
   const entries: Entry[] = []
   let asState: 'none' | 'await' | 'inPattern' | 'done' = 'none'
+  let asCol: number | null = null
   let labelState: 'none' | 'await' | 'done' = 'none'
-  let firstCol = real[0]!.col
+  const baseCol = visualCol(real[0]!)
+  let firstCol = baseCol
   let prevLine = real[0]!.line
-  for (const t of real) {
+  let last = real[0]!
+  let lastCol = baseCol
+  for (let i = 0; i < real.length; i++) {
+    const t = real[i]!
+    const col = visualCol(t)
+    lastCol = col
     if (t.line !== prevLine) {
-      firstCol = t.col
+      firstCol = col
       prevLine = t.line
     }
     const top = entries[entries.length - 1]
+    const x = t.text
+    const prev = real[i - 1]
+    const next = real[i + 1]
     if (top?.kind === 'group') {
       if (!top.hasContent) {
-        top.firstContentCol = t.line === top.openerLine ? t.col : null
+        top.firstContentCol = t.line === top.openerLine ? col : null
+        top.itemCol = col
+      } else if (prev?.type === 'operator' && (prev.text === ',' || prev.text === ';')) {
+        top.itemCol = col
       }
       top.hasContent = true
     }
-    const x = t.text
+    const startsObjectEntry =
+      top?.kind === 'group' &&
+      top.closer === '}' &&
+      prev?.type === 'operator' &&
+      (prev.text === '{' || prev.text === ',')
+    if (startsObjectEntry && t.type === 'operator' && x !== '(') top.itemCol = null
+    // 对象构造/析构开头的裸键允许使用关键字；点号字段沿用解析器的邻接规则。
+    const bareKey =
+      startsObjectEntry &&
+      (next === undefined || (next.type === 'operator' && [':', ',', '}'].includes(next.text)))
+    if (t.type === 'keyword' && (isDotFieldName(prev, t) || bareKey)) {
+      last = { ...t, type: 'ident' }
+      continue
+    }
+    last = t
     if (t.type === 'operator') {
       if (OPENER[x] !== undefined) {
         const pattern: boolean = asState === 'await'
@@ -145,7 +199,8 @@ function scanTail(real: Token[]): Tail | null {
           hasContent: false,
           openerLineIndent: firstCol,
           openerLine: t.line,
-          firstContentCol: null
+          firstContentCol: null,
+          itemCol: null
         })
         // reduce／foreach 的行为组消费掉绑定状态；`as [` 的模式组转入
         // inPattern，由它的闭合置 done
@@ -183,15 +238,19 @@ function scanTail(real: Token[]): Tail | null {
     }
     if (t.type === 'keyword') {
       if (x === 'if') {
-        entries.push({ kind: 'if', col: t.col, phase: 'cond' })
+        entries.push({ kind: 'if', col, phase: 'cond' })
         continue
       }
       if (x === 'def') {
-        entries.push({ kind: 'def', bodyStarted: false })
+        entries.push({ kind: 'def', col, bodyStarted: false })
         continue
       }
       if (x === 'as') {
-        asState = 'await'
+        const importKw = real[i - 2]
+        const importAlias =
+          prev?.type === 'string' && importKw?.type === 'keyword' && importKw.text === 'import'
+        asState = importAlias ? 'none' : 'await'
+        asCol = importAlias ? null : firstCol
         continue
       }
       if (x === 'label') {
@@ -222,7 +281,11 @@ function scanTail(real: Token[]): Tail | null {
   }
   return {
     entries,
-    last: real[real.length - 1]!,
+    baseCol,
+    lineCol: firstCol,
+    lastCol,
+    last,
+    pendingPatternCol: asState === 'await' ? asCol : null,
     asDone: asState === 'done',
     labelDone: labelState === 'done'
   }
@@ -276,12 +339,80 @@ function probe(
   return col + offset
 }
 
+type ProbeRole = 'catch' | 'operand' | 'reduce-pattern'
+
+/** 只沿覆盖哨兵的 AST 分支查找。嵌套 catch、链和 reduce 均以真实归属为准。 */
+function findOwner(node: unknown, hole: number, role: ProbeRole): Node | undefined {
+  if (typeof node !== 'object' || node === null) return undefined
+  const { start, end } = node as Partial<Node>
+  if (start !== undefined && end !== undefined && (hole < start || hole >= end)) {
+    return undefined
+  }
+  if ('inner' in node) {
+    const term = node as Term
+    const inner = term.inner
+    if (role === 'catch' && inner.kind === 'try' && inner.catchBody?.start === hole) return term
+    if (
+      role === 'reduce-pattern' &&
+      (inner.kind === 'reduce' || inner.kind === 'foreach') &&
+      inner.pattern.start === hole
+    )
+      return term
+  }
+  if (role === 'operand' && 'kind' in node) {
+    if (node.kind === 'pipe') {
+      const pipe = node as PipeNode
+      if (pipe.segments.some((seg, i) => i > 0 && seg.start === hole)) return pipe
+    } else if (node.kind === 'chain') {
+      const chain = node as ChainNode
+      if (chain.links.some((link) => link.operand.start === hole)) return chain
+    } else if (node.kind === 'as' || node.kind === 'label') {
+      const binding = node as AsNode | LabelNode
+      if (binding.body.start === hole) return binding
+    }
+  }
+  for (const child of Object.values(node)) {
+    const owner = findOwner(child, hole, role)
+    if (owner !== undefined) return owner
+  }
+  return undefined
+}
+
+function probeOwner(prefix: string, entries: Entry[], role: ProbeRole): Token | undefined {
+  try {
+    const extra = role === 'reduce-pattern' ? ' (. ; .)' : ''
+    const { tokens, program } = parseProgram(`${prefix}\n${SENTINEL}${extra}\n${closeAll(entries)}`)
+    const hole = tokens.findIndex((tok) => tok.offset === prefix.length + 1)
+    const owner = findOwner(program, hole, role)
+    return owner === undefined ? undefined : tokens[owner.start]
+  } catch (error) {
+    if (error instanceof LexError || error instanceof ParseError) return undefined
+    throw error
+  }
+}
+
+function lineIndentAt(src: string, offset: number, tabSize: number): number {
+  let col = 0
+  for (let i = src.lastIndexOf('\n', offset - 1) + 1; i < offset; i++) {
+    const ch = src[i]!
+    if (ch !== ' ' && ch !== '\t') break
+    col = nextCol(col, ch, tabSize)
+  }
+  return col
+}
+
 /**
  * 计算回车后新行的缩进（空格列数）。算不出（残缺输入、未支持形态）
  * 返回 null，调用方回退默认回车。cursor 必须落在某个实 token 所在行
  * 的行尾附近（空行上的回车由默认行为复制缩进）。
  */
-export function enterIndent(src: string, cursor: number, opts: FormatOptions): number | null {
+export function enterIndent(
+  src: string,
+  cursor: number,
+  opts: FormatOptions,
+  tabSize = opts.indentSize
+): number | null {
+  if (cursor > maxEnterPrefixLength) return null
   const prefix = src.slice(0, cursor)
   if (prefix.trim() === '') return null
   let tokens: Token[]
@@ -298,29 +429,75 @@ export function enterIndent(src: string, cursor: number, opts: FormatOptions): n
   if (lastTok.line !== cursorLine) return null
   if (lastTok.type === 'comment') return null
 
-  const tail = scanTail(real)
+  const tail = scanTail(real, visualCols(prefix, tabSize))
   if (tail === null) return null
-  const { entries, last, asDone, labelDone } = tail
+  const { entries, baseCol, lineCol, lastCol, last, pendingPatternCol, asDone, labelDone } = tail
   const top = entries[entries.length - 1]
-  // 文档基准缩进：前缀首个实 token 所在行的行首缩进
-  const offset = real[0]!.col
+  const childIndent = (anchor: number): number => anchor + opts.indentSize
+  // 在检查右侧收尾符之前处理子内容。`}` 或 `end` 已在光标后并不代表
+  // 当前构造已经写完；子级和同级各取自己的锚点。
+  if (last.text === ':') {
+    if (top?.kind === 'def') return childIndent(top.col)
+    if (top?.kind === 'group' && top.closer === '}' && top.itemCol !== null) {
+      return childIndent(top.itemCol)
+    }
+  }
+  if (last.type === 'operator' && OPENER[last.text] !== undefined && top?.kind === 'group') {
+    return childIndent(top.openerLineIndent)
+  }
+  if (last.type === 'keyword') {
+    if (IF_TAIL.has(last.text) && top?.kind === 'if') return childIndent(top.col)
+    if (last.text === 'try' || last.text === 'reduce' || last.text === 'foreach') {
+      return childIndent(lastCol)
+    }
+    if (last.text === 'catch') {
+      const owner = probeOwner(prefix, entries, 'catch')
+      return owner === undefined ? null : childIndent(visualCols(prefix, tabSize)(owner))
+    }
+  }
+  if (pendingPatternCol !== null && (last.text === 'as' || last.text === '?//')) {
+    const owner = last.text === 'as' ? probeOwner(prefix, entries, 'reduce-pattern') : undefined
+    return childIndent(owner === undefined ? pendingPatternCol : visualCols(prefix, tabSize)(owner))
+  }
+
+  const previous = real[real.length - 2]
+  const unarySign =
+    (last.text === '-' || last.text === '+') &&
+    !(previous && (isComplete(previous) || isDotFieldName(real[real.length - 3], previous)))
+  const operatorTail =
+    (last.type === 'operator' || last.type === 'keyword') && OP_TAIL.has(last.text)
+  if (operatorTail && !unarySign) {
+    // 行首运算符用作者实际摆放的列；尾随运算符沿用所属链的起始行，
+    // 不以已经加深的操作数行为基准，避免连续输入同一条链时越缩越深。
+    const owner = lastCol === lineCol ? undefined : probeOwner(prefix, entries, 'operand')
+    const chainCol = owner === undefined ? lineCol : lineIndentAt(prefix, owner.offset, tabSize)
+    const anchor =
+      top?.kind === 'if' || top?.kind === 'def'
+        ? childIndent(top.col)
+        : top?.kind === 'group'
+          ? (top.itemCol ?? chainCol)
+          : chainCol
+    return childIndent(Math.max(chainCol, anchor))
+  }
+
   // POST 前的断行迫使最内层组展开（join 分支会绕过子打印器，把条目
-  // 内部的作者断行一并吞掉），闭括号换行不影响哨兵所在行的缩进
+  // 内部的作者断行一并吞掉），闭括号换行不影响哨兵所在行的缩进。
   const post = `\n${closeAll(entries)}`
   const ask = (insert: string, mode: 'sentinel' | 'operator'): number | null =>
-    probe(prefix, insert, post, mode, opts, offset)
+    probe(prefix, insert, post, mode, opts, baseCol)
   /** 逗号类探针：断行放在分隔符之前。函数实参组把 `a, b` 解析成单个
    *  逗号节点，分隔符之后的断行不构成作者断行（组会被并回单行），
    *  分隔符之前才会；已有尾随逗号时从（虚拟的）前缀里摘掉重建 */
   const askComma = (): number | null => {
     const stripped = last.text === ',' ? prefix.replace(/,\s*$/, '') : prefix
-    return probe(stripped, `\n, ${SENTINEL}`, post, 'sentinel', opts, offset)
+    return probe(stripped, `\n, ${SENTINEL}`, post, 'sentinel', opts, baseCol)
   }
 
   // 光标后同行还有内容：新行将承接它们。只对「下一个 token 是闭括号
   // 或子句关键字」两种给出列对齐答案（这是正则做不到的），其余照常
   // 按前缀分类 —— 新行承接的是普通内容 token，位置同哨兵。
-  const restLine = (src.slice(cursor).split('\n', 1)[0] ?? '').trim()
+  const lineEnd = src.indexOf('\n', cursor)
+  const restLine = src.slice(cursor, lineEnd === -1 ? src.length : lineEnd).trim()
   if (restLine !== '') {
     if (/^[}\])]/.test(restLine)) {
       // 光标停在（多半是自动配全的）闭括号前：文法上还在等内容 →
@@ -331,16 +508,14 @@ export function enterIndent(src: string, cursor: number, opts: FormatOptions): n
         .find((e): e is Extract<Entry, { kind: 'group' }> => e.kind === 'group')
       if (g === undefined) return null
       const contentTail =
-        OP_TAIL.has(last.text) ||
-        (last.type === 'operator' && OPENER[last.text] !== undefined) ||
-        (last.type === 'keyword' &&
-          ['then', 'else', 'elif', 'catch', 'try', 'if'].includes(last.text)) ||
-        (last.text === ':' && (top?.kind === 'def' || top?.kind === 'group')) ||
+        unarySign ||
+        last.text === ',' ||
+        (last.text === ':' && top?.kind === 'group') ||
         (last.text === ';' && top?.kind === 'group' && top.reduce) ||
         asDone ||
         labelDone
       return contentTail
-        ? (g.firstContentCol ?? g.openerLineIndent + opts.indentSize)
+        ? (g.firstContentCol ?? childIndent(g.openerLineIndent))
         : g.openerLineIndent
     }
     if (/^(else|elif|end)\b/.test(restLine)) {
@@ -358,22 +533,12 @@ export function enterIndent(src: string, cursor: number, opts: FormatOptions): n
     if (top?.kind === 'group' && top.firstContentCol !== null) return top.firstContentCol
     return askComma()
   }
-  if (OP_TAIL.has(last.text)) return ask(`\n${SENTINEL}`, 'sentinel')
-  if (last.type === 'operator' && OPENER[last.text] !== undefined) {
-    return ask(`\n${SENTINEL}`, 'sentinel')
-  }
-  if (
-    last.type === 'keyword' &&
-    ['then', 'else', 'elif', 'catch', 'try', 'if'].includes(last.text)
-  ) {
-    return ask(`\n${SENTINEL}`, 'sentinel')
-  }
-  // `:` ＝ def 体的开头（括号栈为空时的冒号只可能是 def 的）；对象／
-  // 模式条目的 `:` 则在未闭合 `{` 组内 —— 哨兵＝值。悬挂组对齐首元素列
+  if (unarySign) return ask(`\n${SENTINEL}`, 'sentinel')
+  // 切片冒号沿用组内对齐规则，不当作开启子块。
   if (last.text === ':' && top?.kind === 'group' && top.firstContentCol !== null) {
     return top.firstContentCol
   }
-  if (last.text === ':' && (top?.kind === 'def' || top?.kind === 'group')) {
+  if (last.text === ':' && top?.kind === 'group') {
     return ask(`\n${SENTINEL}`, 'sentinel')
   }
   // reduce／foreach 组的部分分隔符：哨兵＝下一部分（悬挂组对齐首部分列）
@@ -419,7 +584,7 @@ export function enterEdit(
   insertSpaces: boolean,
   tabSize: number
 ): EnterEdit | null {
-  const cols = enterIndent(src, cursor, opts)
+  const cols = enterIndent(src, cursor, opts, tabSize)
   if (cols === null) return null
   const indent = (width: number): string =>
     insertSpaces
@@ -432,12 +597,10 @@ export function enterEdit(
   const right = /^[ \t]*/.exec(src.slice(cursor))![0]
   if (left && OPENER[left[1]!] === src[cursor + right.length]) {
     const base = /^[ \t]*/.exec(linePrefix)![0]
-    let baseCols = 0
-    for (const ch of base) baseCols += ch === '\t' ? tabSize - (baseCols % tabSize) : 1
     return {
       start: cursor - left[2]!.length,
       end: cursor + right.length,
-      beforeCursor: `\n${indent(baseCols + opts.indentSize)}`,
+      beforeCursor: `\n${indent(cols)}`,
       afterCursor: `\n${base}`
     }
   }

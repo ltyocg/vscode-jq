@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "NodeNext",
     "target": "ES2022",
     "strict": true,
     "esModuleInterop": true,
@@ -8,5 +8,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["esbuild.mts"]
+  "include": ["esbuild.mts", "scripts/*.mts"]
 }

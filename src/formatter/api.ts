@@ -22,7 +22,7 @@ export interface FormatOptions {
   trailingComma?: TrailingCommaMode
 }
 
-export const defaultFormatOptions: FormatOptions = {
+export const defaultFormatOptions: Required<FormatOptions> = {
   printWidth: 100,
   indentSize: 2,
   trailingComma: 'never'

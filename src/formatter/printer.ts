@@ -25,7 +25,7 @@
  *    （行首延续的组内非首元素）。
  *  - padNext / forceBreak 是发射游标的一次性标志（悬挂组内侧补位 /
  *    行尾注释后的强制换行），随发射消费，与层级无关。
- *  - 从不改动 token 文本，从不增删 token。
+ *  - 保留 token 文本，仅允许按策略增删对象构造的尾随逗号。
  */
 import type { Token } from '../tokenizer'
 import { gapBetween } from './spacing'
@@ -62,12 +62,15 @@ interface Ctx {
 
 export function printProgramResult(r: ParseResult, opts: FormatOptions): string {
   const out = new LineBuilder()
-  const metrics = new Metrics(r.tokens, r.real, r.unaryAt, opts.printWidth)
-  new Printer(r.tokens, r.real, r.unaryAt, opts, out, metrics).run(r.program)
+  // 布局开始前就抑制源码尾逗号：外层平铺直接发射内部 token 时也生效。
+  const suppressed =
+    opts.trailingComma === 'preserve' || r.objectCommas.size === 0 ? undefined : r.objectCommas
+  const metrics = new Metrics(r.tokens, r.real, r.unaryAt, opts.printWidth, suppressed)
+  new Printer(r.tokens, r.real, r.unaryAt, opts, out, metrics, suppressed).run(r.program)
   // 最后一行内容仍在拼行缓冲里，先落行再收尾（空行由 trim 去掉）
   out.finishLine()
   out.trimTrailingBlankLines()
-  return out.join('\n')
+  return out.join(r.eol) + r.eol
 }
 
 class Printer {
@@ -88,7 +91,7 @@ class Printer {
   /** 与发射同步的括号栈（gapBetween 的 enclosing） */
   #stack: string[] = []
   /** 被抑制的 token 原始下标（按策略去掉的对象尾随逗号） */
-  readonly #suppressed = new Set<number>()
+  readonly #suppressed: ReadonlySet<number> | undefined
 
   readonly #tokens: Token[]
   readonly #real: number[]
@@ -103,7 +106,8 @@ class Printer {
     unaryAt: Set<number>,
     opts: FormatOptions,
     out: LineBuilder,
-    m: Metrics
+    m: Metrics,
+    suppressed: ReadonlySet<number> | undefined
   ) {
     this.#tokens = tokens
     this.#real = real
@@ -111,6 +115,7 @@ class Printer {
     this.#opts = opts
     this.#out = out
     this.#m = m
+    this.#suppressed = suppressed
   }
 
   get #is(): number {
@@ -175,11 +180,12 @@ class Printer {
     while (this.#rpos < this.#real.length && this.#real[this.#rpos] < to) {
       const idx = this.#real[this.#rpos]
       this.#flushCommentsBefore(idx)
-      if (this.#suppressed.has(idx)) {
+      if (this.#suppressed?.has(idx)) {
         // 去掉的尾随逗号：不发射，但保留为后续间距与行尾注释挂靠的
         // 参照 token（闭括号与它的间距按「贴逗号」计）；它占用的源码
         // 行仍计入空行保持（独占一行的逗号被去掉不得凭空多出空行）
         this.#prevReal = idx
+        this.#through = idx
         this.#lastEndLine = this.#m.endLine(idx)
         this.#rpos++
         continue
@@ -583,7 +589,7 @@ class Printer {
           inner.entries,
           (e, c) => this.#printObjectEntry(e as ObjectEntry, c),
           false,
-          true
+          inner.trailingSep
         )
         return
       }
@@ -688,34 +694,17 @@ class Printer {
 
   // ==== 尾随逗号（trailingComma 选项）=====================================
 
-  /** 对象组末条目与闭括号之间的源码尾随逗号（无则 undefined） */
-  #trailingCommaOf(children: Node[], closerIdx: number): number | undefined {
-    if (children.length === 0) return undefined
-    const lastEnd = children[children.length - 1]!.end
-    for (let i = lastEnd; i < closerIdx; i++) {
-      const t = this.#tokens[i]!
-      if (t.type === 'operator' && t.text === ',') return i
-    }
-    return undefined
-  }
-
-  /**
-   * 按策略处理对象组的尾随逗号，在末条目发射之后、闭括号（及其前置
-   * 注释冲刷）之前调用。'multiline' 缺逗号时发射合成逗号 —— 唯一
-   * 允许新增 token 的位置；'never' 把源码逗号记入抑制集（单行形态
-   * 在平铺路径上先行处理）。
-   */
-  #applyTrailingComma(srcComma: number | undefined): void {
-    const mode = this.#opts.trailingComma ?? 'never'
-    if (mode === 'preserve') return
-    if (mode === 'never') {
-      if (srcComma !== undefined) this.#suppressed.add(srcComma)
-      return
-    }
-    if (srcComma === undefined) {
+  /** 展开的非空对象：在闭括号排版前发射逗号，不能把闭括号的前导空格发给逗号。 */
+  #finishObjectEntries(sourceComma: number | null | undefined): void {
+    if (sourceComma === undefined) return // 非对象组
+    if (this.#opts.trailingComma === 'multiline') {
+      // 源码逗号已被统一抑制。无论源码是否有逗号，都走紧贴末条目的布局，
+      // 先于该条目之后的注释发射，避免同一种布局两次格式化出现不同结果。
       this.#applyPending()
       this.#out.append(',', false)
       this.#advanceCol(',', false)
+    } else if (this.#opts.trailingComma === 'preserve' && sourceComma !== null) {
+      this.#emitTo(sourceComma + 1)
     }
   }
 
@@ -744,20 +733,14 @@ class Printer {
     children: Node[],
     printChild: (n: Node, ctx: Ctx) => void,
     allowHug = false,
-    allowTrailing = false
+    sourceComma?: number | null
   ): void {
-    // 对象构造的源码尾随逗号（尾随逗号在 jq 中唯一合法的位置）
-    const srcComma = allowTrailing ? this.#trailingCommaOf(children, closerIdx) : undefined
     const authorBreak = this.#m.groupAuthorBreak(openIdx, closerIdx, children)
     const forced = this.#m.groupForced(openIdx, closerIdx, children)
     if (!forced) {
       // 条件③：开括号已落行，剩余内容（元素 + 闭括号）平铺放得下
       const rest = this.#m.flatWidth(openIdx + 1, closerIdx + 1)
       if (this.#col + rest <= this.#opts.printWidth) {
-        // 单行形态：'never' 与 'multiline' 都去掉源码尾随逗号
-        if (srcComma !== undefined && (this.#opts.trailingComma ?? 'never') !== 'preserve') {
-          this.#suppressed.add(srcComma)
-        }
         this.#emitTo(closerIdx + 1)
         return
       }
@@ -817,14 +800,12 @@ class Printer {
         }
       }
       // 尾随逗号（悬挂式是展开形态＝多行）
-      if (allowTrailing && children.length > 0) this.#applyTrailingComma(srcComma)
+      this.#finishObjectEntries(sourceComma)
       // 闭括号：作者断行或注释在前 → 回开括号列（调用式回行首）；
       // 否则贴末元素（前补空格）
       const last = children[children.length - 1]!
       const closerBroke = this.#m.brokeBetween(last.end - 1, closerIdx)
       if (closerBroke || this.#m.hasCommentBefore(closerIdx, last.end)) {
-        if (this.#m.hasCommentBefore(closerIdx, last.end)) this.#newline(elemCol)
-        this.#emitTo(closerIdx) // 冲刷闭括号前的注释
         this.#newline(callLike ? base : openerCol)
       } else {
         this.#padNext = true
@@ -856,14 +837,8 @@ class Printer {
         this.#emitTo(children[i + 1]!.start) // 分隔符尾随
       }
     }
-    // 尾随逗号（分隔展开＝多行）；末元素之后的源码逗号由闭括号冲刷发射
-    if (allowTrailing && children.length > 0) this.#applyTrailingComma(srcComma)
-    // 闭括号前的注释对齐到元素层（无元素时空组注释也在此层）
-    const lastEnd = children.length > 0 ? children[children.length - 1]!.end : openIdx + 1
-    if (this.#m.hasCommentBefore(closerIdx, lastEnd)) {
-      if (children.length === 0 || this.#out.hasContent) this.#newline(base + this.#is)
-    }
-    this.#emitTo(closerIdx) // 冲刷闭括号前的注释与残余分隔符
+    if (children.length > 0) this.#finishObjectEntries(sourceComma)
+    // 独立注释与闭括号在同一上下文，不受待抑制的源码逗号影响。
     this.#newline(base)
     this.#emitTo(closerIdx + 1) // 闭括号
   }

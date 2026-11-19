@@ -21,7 +21,7 @@
  * 词法由 src/tokenizer.ts 提供（token 含注释）。解析器在「实 token」
  * （非注释）序列上工作；span 记录原始下标，打印器据此冲刷注释。
  */
-import { tokenize, type Token } from '../../tokenizer'
+import { isDotFieldName, tokenizeSource, type Token } from '../../tokenizer'
 import type {
   ChainLink,
   CommaItem,
@@ -61,17 +61,20 @@ export interface ParseResult {
   real: number[]
   /** 一元 '-'/'+' 的原始下标集合（间距规则用） */
   unaryAt: Set<number>
+  /** 对象构造的尾随逗号原始下标。分隔符、数组和模式不在其中。 */
+  objectCommas: ReadonlySet<number>
+  eol: '\r\n' | '\n'
   program: Program
 }
 
 export function parseProgram(src: string): ParseResult {
-  const tokens = tokenize(src)
+  const { tokens, eol } = tokenizeSource(src)
   const real: number[] = []
   const unaryAt = new Set<number>()
+  const objectCommas = new Set<number>()
   for (let i = 0; i < tokens.length; i++) if (tokens[i].type !== 'comment') real.push(i)
-  const p = new Parser(tokens, real, unaryAt)
-  const program = p.parseProgram()
-  return { tokens, real, unaryAt, program }
+  const program = new Parser(tokens, real, unaryAt, objectCommas).parseProgram()
+  return { tokens, real, unaryAt, objectCommas, eol, program }
 }
 
 // Pratt 层级（低 → 高）；赋值族与比较族是 nonassoc（链式即报错）
@@ -94,11 +97,13 @@ class Parser {
   readonly #tokens: Token[]
   readonly #real: number[]
   readonly #unaryAt: Set<number>
+  readonly #objectCommas: Set<number>
 
-  constructor(tokens: Token[], real: number[], unaryAt: Set<number>) {
+  constructor(tokens: Token[], real: number[], unaryAt: Set<number>, objectCommas: Set<number>) {
     this.#tokens = tokens
     this.#real = real
     this.#unaryAt = unaryAt
+    this.#objectCommas = objectCommas
   }
 
   // ---- 基础设施 ----------------------------------------------------------
@@ -154,13 +159,6 @@ class Parser {
   /** span 收尾：最后一个已消费实 token 的原始下标 + 1 */
   #endHere(): number {
     return this.#real[this.#r - 1] + 1
-  }
-
-  /** 同一行且列邻接（`.` 与其后的字段名） */
-  #adjacent(a: number, b: number): boolean {
-    const ta = this.#tokens[a]
-    const tb = this.#tokens[b]
-    return ta.line === tb.line && ta.col + ta.text.length === tb.col
   }
 
   // ---- 程序层 ------------------------------------------------------------
@@ -394,11 +392,7 @@ class Parser {
           // 邻接的 ident/关键字/常量 是字段名（FIELD 语义）；string 是
           // parser 级规则不要求邻接；其余（含 `.[`）是身份
           const n = this.#tok()
-          if (
-            n !== undefined &&
-            (n.type === 'ident' || n.type === 'keyword' || n.type === 'constant') &&
-            this.#adjacent(dotTok, this.#idx())
-          ) {
+          if (isDotFieldName(this.#tokens[dotTok], n)) {
             const name = this.#adv()
             return { kind: 'field', dotTok, name }
           }
@@ -585,11 +579,7 @@ class Parser {
       if (this.#isOp('.')) {
         const dotTok = this.#idx()
         const n = this.#tok(1)
-        if (
-          n !== undefined &&
-          (n.type === 'ident' || n.type === 'keyword' || n.type === 'constant') &&
-          this.#adjacent(dotTok, this.#idx(1))
-        ) {
+        if (isDotFieldName(this.#tokens[dotTok], n)) {
           this.#adv()
           const name = this.#adv()
           suffixes.push({ kind: 'field', start: dotTok, end: this.#endHere(), dotTok, name })
@@ -654,6 +644,7 @@ class Parser {
           const sep = this.#adv()
           if (this.#isOp('}')) {
             trailingSep = sep
+            this.#objectCommas.add(sep)
             break
           }
           continue
